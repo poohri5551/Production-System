@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เข้าสู่ระบบ - Inventory System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Kanit', sans-serif; background: linear-gradient(135deg, #f3f4f6 0%, #e2e8f0 100%); display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: #334155;}
+        .login-container { background-color: #ffffff; padding: 40px; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 380px; border-top: 5px solid #3b82f6; animation: popIn 0.5s forwards; }
+        @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .system-logo { text-align: center; font-size: 48px; color: #3b82f6; margin-bottom: 10px; }
+        h2 { text-align: center; color: #1e293b; margin-top: 0; margin-bottom: 30px; font-weight: 600; }
+        .input-group { margin-bottom: 20px; }
+        .input-group label { display: block; margin-bottom: 8px; color: #475569; font-size: 15px; font-weight: 500; }
+        .input-group input { width: 100%; padding: 12px 15px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 15px; font-family: 'Kanit'; background-color: #f8fafc; transition: all 0.3s ease; }
+        .input-group input:focus { background-color: #ffffff; border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .login-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; transition: all 0.3s; margin-top: 15px; }
+        .login-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(59, 130, 246, 0.3); }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="system-logo"><i class="fas fa-boxes"></i></div>
+        <h2>เข้าสู่ระบบ</h2>
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="username"><i class="fas fa-user" style="color:#64748b;"></i> ชื่อผู้ใช้งาน</label>
+                <input type="text" id="username" name="username" required placeholder="กรอกชื่อผู้ใช้งาน">
+            </div>
+            <div class="input-group">
+                <label for="password"><i class="fas fa-lock" style="color:#64748b;"></i> รหัสผ่าน</label>
+                <input type="password" id="password" name="password" required placeholder="กรอกรหัสผ่าน">
+            </div>
+            <button type="submit" class="login-btn"><i class="fas fa-sign-in-alt"></i> ล็อกอิน</button>
+        </form>
+    </div>
+
+<script>
+    document.getElementById('loginForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const formData = new FormData(this);
+
+        fetch('/api/login', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // ถ้าล็อกอินสำเร็จ ไปที่หน้าคลังสินค้า
+                localStorage.setItem('currentUser', data.username || '');
+                localStorage.setItem('currentUserRole', data.role || '');
+                window.location.href = "/mainpage"; 
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
+</script>
+</body>
+</html>
