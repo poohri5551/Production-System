@@ -21,3 +21,7 @@ cache/
 .env.*
 !.env.example
 npm-debug.log*
+
+inventory_db*.sql
+backups/
+export_excel/
