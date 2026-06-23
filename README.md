@@ -65,6 +65,43 @@ http://127.0.0.1:5000/app
 
 Vue production assets are served under `/app/assets/...`. API calls continue to use `/api/*`, and uploaded images continue to use `/static/uploads/...`.
 
+## Export Database to Excel
+
+Use `backups/` for both full operational backups and Excel exports. A full backup folder should contain `inventory_db.sql`, `uploads/`, and `db_excel/`.
+
+With Docker Compose running:
+
+```powershell
+docker compose exec app python scripts/export_db_to_excel.py
+```
+
+The script reads the app container database environment variables and writes one workbook to:
+
+```text
+./backups/db_excel/database_export_YYYYMMDD_HHMMSS.xlsx
+```
+
+For a full timestamped backup, pass the Excel output directory into the app container:
+
+```powershell
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+New-Item -ItemType Directory -Force ".\backups\$ts"
+
+docker compose exec -T db sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > ".\backups\$ts\inventory_db.sql"
+docker compose cp app:/app/static/uploads ".\backups\$ts\uploads"
+docker compose exec -T -e EXPORT_EXCEL_DIR="/app/backups/$ts/db_excel" app python scripts/export_db_to_excel.py
+
+Get-ChildItem ".\backups\$ts"
+```
+
+The Excel file will be written to:
+
+```text
+./backups/YYYYMMDD_HHMMSS/db_excel/database_export_YYYYMMDD_HHMMSS.xlsx
+```
+
+Each database table is exported to a separate worksheet. Generated `.xlsx`, `.sql`, and copied uploads under `backups/` are ignored by git.
+
 ## Legacy Rollback URLs
 
 The Vue app is now the default landing page, while legacy Flask pages are still available:

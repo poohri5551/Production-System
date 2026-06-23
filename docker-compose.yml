@@ -11,6 +11,7 @@ services:
       - db
     volumes:
       - uploads_data:/app/static/uploads
+      - ./backups:/app/backups
     restart: unless-stopped
 
   db:
