@@ -1,0 +1,7 @@
+settind_dies table
+set-time-start  = Time Start Setting Die
+set-time-end    = Time End Setting Die
+custom-time-1   = Time Start Setting Material
+custom-time-2   = Time End Setting Material
+custom-time-3   = Time Start Adjust Accuracy Part
+custom-time-4   = Time End Adjust Accuracy Part
