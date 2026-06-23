@@ -133,10 +133,10 @@ async function submitBulkDelete() {
   <section class="space-y-6">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
-        <p class="text-sm font-medium uppercase tracking-[0.22em] text-blue-600">Phase 5 migrated</p>
-        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Production Finish</h1>
+        <p class="text-sm font-medium uppercase tracking-[0.22em] text-blue-600">For production finish</p>
+        <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">เสร็จสิ้นการผลิต</h1>
         <p class="mt-2 max-w-2xl text-slate-500">
-          Finish is the final workflow step. Confirmation lets Flask snapshot related data and mark active work as finished.
+          ใช้สำหรับเพิ่มรายการผลิตที่เสร็จสิ้นแล้วและยืนยันผลการผลิตที่เสร็จสิ้น
         </p>
       </div>
       <div class="flex flex-wrap gap-3">
@@ -173,8 +173,8 @@ async function submitBulkDelete() {
     </div>
     <div v-else-if="!finishes.length" class="shell-card p-10 text-center">
       <div class="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-3xl bg-blue-50 text-blue-500">FN</div>
-      <h2 class="text-lg font-semibold text-slate-900">No Production Finish records found</h2>
-      <p class="mt-2 text-sm text-slate-500">Add a finish record from an active Production Start plan.</p>
+      <h2 class="text-lg font-semibold text-slate-900">ไม่พบรายการผลิตที่เสร็จสิ้นแล้ว</h2>
+      <p class="mt-2 text-sm text-slate-500">ลองตรวจสอบใหม่ในภายหลัง</p>
     </div>
     <ProductionFinishTable
       v-else

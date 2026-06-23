@@ -1,4 +1,6 @@
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   detail: {
     type: Object,
@@ -7,6 +9,7 @@ defineProps({
 })
 
 const emit = defineEmits(['close'])
+const expandedItems = ref(new Set())
 
 function formatDateTime(value) {
   if (!value) return '-'
@@ -18,6 +21,39 @@ function formatDateTime(value) {
 
 function timelineTime(item) {
   return item.time_finish || item.time_end || item.time_start || item.updated_at || item.created_at || ''
+}
+
+function timelineKey(item) {
+  return `${item.source_table || 'timeline'}-${item.source_id || item.step || 'item'}`
+}
+
+function isExpanded(item) {
+  return expandedItems.value.has(timelineKey(item))
+}
+
+function toggleItem(item) {
+  const next = new Set(expandedItems.value)
+  const key = timelineKey(item)
+  if (next.has(key)) {
+    next.delete(key)
+  } else {
+    next.add(key)
+  }
+  expandedItems.value = next
+}
+
+function detailRows(item) {
+  return Array.isArray(item.detail) ? item.detail : []
+}
+
+function displayValue(row) {
+  const value = row?.value
+  if (value === null || value === undefined || value === '') return '-'
+  const label = String(row?.label || '').toLowerCase()
+  if (label.includes('time') || label.includes('created at') || label.includes('updated at')) {
+    return formatDateTime(value)
+  }
+  return value
 }
 
 function statusClass(status) {
@@ -86,23 +122,39 @@ function stepClass(step) {
             No timeline data found.
           </div>
           <ol v-else class="mt-5 space-y-4">
-            <li v-for="item in detail.timeline" :key="`${item.source_table}-${item.source_id}`" class="relative rounded-3xl border border-blue-100 bg-blue-50/40 p-4">
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p class="font-semibold text-slate-950">{{ item.step || '-' }}</p>
-                  <p class="mt-1 text-sm text-slate-500">
-                    {{ formatDateTime(timelineTime(item)) }} / User: {{ item.user || '-' }}
-                  </p>
-                </div>
+            <li v-for="item in detail.timeline" :key="timelineKey(item)" class="relative rounded-3xl border border-blue-100 bg-blue-50/40 p-4">
+              <button type="button" class="flex w-full flex-col gap-3 text-left sm:flex-row sm:items-start sm:justify-between" @click="toggleItem(item)">
+                <span class="flex items-start gap-3">
+                  <span class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-blue-600 shadow-sm">
+                    <svg class="h-4 w-4 transition" :class="{ 'rotate-90': isExpanded(item) }" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
+                  <span>
+                    <span class="block font-semibold text-slate-950">{{ item.step || '-' }}</span>
+                    <span class="mt-1 block text-sm text-slate-500">
+                      {{ formatDateTime(timelineTime(item)) }} / User: {{ item.user || '-' }}
+                    </span>
+                  </span>
+                </span>
                 <span class="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold" :class="statusClass(item.status)">
                   {{ item.status || '-' }}
                 </span>
-              </div>
+              </button>
               <div class="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 lg:grid-cols-4">
                 <span>Start: {{ formatDateTime(item.time_start) }}</span>
                 <span>End: {{ formatDateTime(item.time_end) }}</span>
                 <span>Finish: {{ formatDateTime(item.time_finish) }}</span>
                 <span>{{ item.source_table || '-' }} #{{ item.source_id || '-' }}</span>
+              </div>
+              <div v-if="isExpanded(item)" class="mt-4 rounded-2xl border border-blue-100 bg-white p-4">
+                <div v-if="detailRows(item).length" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div v-for="row in detailRows(item)" :key="`${timelineKey(item)}-${row.label}`" class="min-w-0 rounded-2xl bg-slate-50 px-3 py-2">
+                    <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">{{ row.label }}</p>
+                    <p class="mt-1 break-words text-sm font-medium text-slate-800">{{ displayValue(row) }}</p>
+                  </div>
+                </div>
+                <p v-else class="text-sm text-slate-500">No extra details.</p>
               </div>
             </li>
           </ol>

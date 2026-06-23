@@ -177,7 +177,7 @@ async function submitBulkDelete() {
         <p class="text-sm font-medium uppercase tracking-[0.22em] text-blue-600">FOR QC INSPECTION</p>
         <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">การตรวจสอบคุณภาพ</h1>
         <p class="mt-2 max-w-2xl text-slate-500">
-          ตรวจสอบและจัดการ QC Inspections ผ่านหน้านี้ การตรวจสอบคุณภาพ เป็นส่วนสำคัญในการควบคุมคุณภาพของกระบวนการผลิต
+          ใช้สำหรับตรวจสอบและจัดการ QC Inspections 
         </p>
       </div>
       <div class="flex flex-wrap gap-3">

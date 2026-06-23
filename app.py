@@ -158,6 +158,28 @@ def ensure_column(cursor, table_name, column_name, column_definition):
     if not cursor.fetchone():
         cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_definition}")
 
+WORKFLOW_TABLES = [
+    'production_plans',
+    'setting_dies',
+    'qc_inspections',
+    'production_starts',
+    'production_finishes',
+]
+
+def ensure_workflow_created_by_columns(cursor):
+    for table_name in WORKFLOW_TABLES:
+        cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+        if not cursor.fetchone():
+            continue
+        ensure_column(cursor, table_name, 'created_by_user_id', 'created_by_user_id INT NULL')
+        ensure_column(cursor, table_name, 'created_by_username', 'created_by_username VARCHAR(80) NULL')
+
+def created_by_values():
+    return (
+        session.get('user_id') if has_request_context() else None,
+        session.get('username') if has_request_context() else None,
+    )
+
 def ensure_users_table(cursor):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -176,7 +198,9 @@ def ensure_active_visibility_columns(cursor):
     ensure_column(cursor, 'setting_dies', 'is_finished', 'is_finished TINYINT DEFAULT 0')
     ensure_column(cursor, 'qc_inspections', 'is_finished', 'is_finished TINYINT DEFAULT 0')
     ensure_production_starts_table(cursor)
+    ensure_production_finishes_table(cursor)
     ensure_parts_schema(cursor)
+    ensure_workflow_created_by_columns(cursor)
 
 def clear_active_work_for_plan(cursor, plan_no):
     ensure_active_visibility_columns(cursor)
@@ -519,6 +543,29 @@ def dashboard_last_updated(*records):
                 values.append(value)
     return max(values) if values else None
 
+def dashboard_first_value(record, field_names, fallback='-'):
+    record = record or {}
+    for field_name in field_names:
+        value = record.get(field_name)
+        if value not in (None, ''):
+            return value
+    return fallback
+
+def dashboard_recorded_by(record):
+    return dashboard_first_value(record, ['created_by_username', 'created_by'])
+
+def dashboard_detail_entry(label, value):
+    return {
+        'label': label,
+        'value': dashboard_value(value),
+    }
+
+def dashboard_source_metadata(source_table, source_id):
+    return {
+        'source_table': source_table,
+        'source_id': source_id,
+    }
+
 def dashboard_fetch_related(cursor, plan_ids):
     related = {
         'setting_dies': {},
@@ -624,6 +671,95 @@ def dashboard_derive_item(plan, related):
         }
     }
 
+def dashboard_plan_detail(plan):
+    return [
+        dashboard_detail_entry('Plan No.', plan.get('plan_no')),
+        dashboard_detail_entry('Part No.', plan.get('part_no')),
+        dashboard_detail_entry('Die No.', plan.get('die_no')),
+        dashboard_detail_entry('Zone', plan.get('zone')),
+        dashboard_detail_entry('Status', plan.get('status') or 'pending'),
+        dashboard_detail_entry('Is Finished', 'Yes' if plan.get('is_finished') else 'No'),
+        dashboard_detail_entry('Created At', plan.get('created_at')),
+        dashboard_detail_entry('Updated At', plan.get('updated_at')),
+        dashboard_detail_entry('Recorded by', dashboard_recorded_by(plan)),
+        dashboard_detail_entry('Source', f"production_plans #{dashboard_value(plan.get('id'))}"),
+    ]
+
+def dashboard_setting_detail(row):
+    return [
+        dashboard_detail_entry('Plan No.', row.get('plan_no')),
+        dashboard_detail_entry('Part No.', row.get('part_no')),
+        dashboard_detail_entry('Die No.', row.get('die_no')),
+        dashboard_detail_entry('Lot No.', row.get('lot_no')),
+        dashboard_detail_entry('Process Die', row.get('process_die')),
+        dashboard_detail_entry('DH', row.get('dh')),
+        dashboard_detail_entry('SPM', row.get('spm')),
+        dashboard_detail_entry('Material', row.get('material')),
+        dashboard_detail_entry('Technician', row.get('technician')),
+        dashboard_detail_entry('Recorded by', dashboard_recorded_by(row)),
+        dashboard_detail_entry('Time Start Setting Die', row.get('time_start')),
+        dashboard_detail_entry('Time End Setting Die', row.get('time_end')),
+        dashboard_detail_entry('Time Start Setting Material', row.get('custom_time_1')),
+        dashboard_detail_entry('Time End Setting Material', row.get('custom_time_2')),
+        dashboard_detail_entry('Time Start Adjust Accuracy Part', row.get('custom_time_3')),
+        dashboard_detail_entry('Time End Adjust Accuracy Part', row.get('custom_time_4')),
+        dashboard_detail_entry('Is Finished', 'Yes' if row.get('is_finished') else 'No'),
+        dashboard_detail_entry('Created At', row.get('created_at')),
+        dashboard_detail_entry('Source', f"setting_dies #{dashboard_value(row.get('id'))}"),
+    ]
+
+def dashboard_qc_detail(row):
+    return [
+        dashboard_detail_entry('Plan No.', row.get('plan_no')),
+        dashboard_detail_entry('Part No.', row.get('part_no')),
+        dashboard_detail_entry('Lot No.', row.get('lot_no')),
+        dashboard_detail_entry('Result / Status', row.get('status') or 'pending'),
+        dashboard_detail_entry('Percent Result', row.get('percent_result')),
+        dashboard_detail_entry('Time Start', row.get('time_start')),
+        dashboard_detail_entry('Time End', row.get('time_end')),
+        dashboard_detail_entry('Problem Area', row.get('problem_area')),
+        dashboard_detail_entry('Problem Point', row.get('problem_point')),
+        dashboard_detail_entry('Cause', row.get('cause')),
+        dashboard_detail_entry('Solution', row.get('solution')),
+        dashboard_detail_entry('Recorded by', dashboard_recorded_by(row)),
+        dashboard_detail_entry('Created At', row.get('created_at')),
+        dashboard_detail_entry('Is Finished', 'Yes' if row.get('is_finished') else 'No'),
+        dashboard_detail_entry('Source', f"qc_inspections #{dashboard_value(row.get('id'))}"),
+    ]
+
+def dashboard_production_start_detail(row):
+    return [
+        dashboard_detail_entry('Plan No.', row.get('plan_no')),
+        dashboard_detail_entry('Part No.', row.get('part_no')),
+        dashboard_detail_entry('Die No.', row.get('die_no')),
+        dashboard_detail_entry('Lot No.', row.get('lot_no')),
+        dashboard_detail_entry('Qty', row.get('qty')),
+        dashboard_detail_entry('Confirm Status', row.get('confirm_status') or 'waiting'),
+        dashboard_detail_entry('Time Start', row.get('time_start')),
+        dashboard_detail_entry('Recorded by', dashboard_recorded_by(row)),
+        dashboard_detail_entry('Created At', row.get('created_at')),
+        dashboard_detail_entry('Updated At', row.get('updated_at')),
+        dashboard_detail_entry('Is Finished', 'Yes' if row.get('is_finished') else 'No'),
+        dashboard_detail_entry('Source', f"production_starts #{dashboard_value(row.get('id'))}"),
+    ]
+
+def dashboard_production_finish_detail(row):
+    return [
+        dashboard_detail_entry('Plan No.', row.get('plan_no')),
+        dashboard_detail_entry('Part No.', row.get('part_no')),
+        dashboard_detail_entry('Die No.', row.get('die_no')),
+        dashboard_detail_entry('Lot No.', row.get('lot_no')),
+        dashboard_detail_entry('Planned Qty', row.get('planned_qty')),
+        dashboard_detail_entry('Actual Qty', row.get('actual_qty')),
+        dashboard_detail_entry('Finish Status', row.get('finish_status') or 'pending'),
+        dashboard_detail_entry('Time Finish', row.get('time_finish')),
+        dashboard_detail_entry('Hold Time', row.get('hold_time')),
+        dashboard_detail_entry('Note', row.get('note')),
+        dashboard_detail_entry('Recorded by', dashboard_recorded_by(row)),
+        dashboard_detail_entry('Created At', row.get('created_at')),
+        dashboard_detail_entry('Source', f"production_finishes #{dashboard_value(row.get('id'))}"),
+    ]
+
 def dashboard_timeline_from_records(plan, related):
     plan_id = plan.get('id')
     timeline = [{
@@ -634,9 +770,11 @@ def dashboard_timeline_from_records(plan, related):
         'time_finish': None,
         'created_at': plan.get('created_at'),
         'updated_at': None,
-        'user': '-',
+        'user': dashboard_recorded_by(plan),
         'source_table': 'production_plans',
         'source_id': plan_id,
+        'metadata': dashboard_source_metadata('production_plans', plan_id),
+        'detail': dashboard_plan_detail(plan),
     }]
 
     for row in related['setting_dies'].get(plan_id, []):
@@ -648,9 +786,11 @@ def dashboard_timeline_from_records(plan, related):
             'time_finish': None,
             'created_at': row.get('created_at'),
             'updated_at': None,
-            'user': dashboard_value(row.get('technician')),
+            'user': dashboard_recorded_by(row),
             'source_table': 'setting_dies',
             'source_id': row.get('id'),
+            'metadata': dashboard_source_metadata('setting_dies', row.get('id')),
+            'detail': dashboard_setting_detail(row),
         })
 
     for row in related['qc_inspections'].get(plan_id, []):
@@ -662,9 +802,11 @@ def dashboard_timeline_from_records(plan, related):
             'time_finish': None,
             'created_at': row.get('created_at'),
             'updated_at': None,
-            'user': '-',
+            'user': dashboard_recorded_by(row),
             'source_table': 'qc_inspections',
             'source_id': row.get('id'),
+            'metadata': dashboard_source_metadata('qc_inspections', row.get('id')),
+            'detail': dashboard_qc_detail(row),
         })
 
     for row in related['production_starts'].get(plan_id, []):
@@ -676,9 +818,11 @@ def dashboard_timeline_from_records(plan, related):
             'time_finish': None,
             'created_at': row.get('created_at'),
             'updated_at': row.get('updated_at'),
-            'user': '-',
+            'user': dashboard_recorded_by(row),
             'source_table': 'production_starts',
             'source_id': row.get('id'),
+            'metadata': dashboard_source_metadata('production_starts', row.get('id')),
+            'detail': dashboard_production_start_detail(row),
         })
 
     for row in related['production_finishes'].get(plan_id, []):
@@ -690,9 +834,11 @@ def dashboard_timeline_from_records(plan, related):
             'time_finish': row.get('time_finish'),
             'created_at': row.get('created_at'),
             'updated_at': None,
-            'user': '-',
+            'user': dashboard_recorded_by(row),
             'source_table': 'production_finishes',
             'source_id': row.get('id'),
+            'metadata': dashboard_source_metadata('production_finishes', row.get('id')),
+            'detail': dashboard_production_finish_detail(row),
         })
 
     return sorted(
@@ -810,6 +956,7 @@ def get_dashboard_parts_status():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            ensure_active_visibility_columns(cursor)
             cursor.execute("""
                 SELECT
                     p.id,
@@ -819,6 +966,8 @@ def get_dashboard_parts_status():
                     p.zone,
                     p.status,
                     p.created_at,
+                    p.created_by_user_id,
+                    p.created_by_username,
                     p.is_finished
                 FROM production_plans p
                 LEFT JOIN parts ON parts.id = p.part_id
@@ -844,6 +993,7 @@ def get_dashboard_part_status_detail(plan_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
+            ensure_active_visibility_columns(cursor)
             cursor.execute("""
                 SELECT
                     p.id,
@@ -853,6 +1003,8 @@ def get_dashboard_part_status_detail(plan_id):
                     p.zone,
                     p.status,
                     p.created_at,
+                    p.created_by_user_id,
+                    p.created_by_username,
                     p.is_finished
                 FROM production_plans p
                 LEFT JOIN parts ON parts.id = p.part_id
@@ -958,11 +1110,14 @@ def add_production():
     try:
         with conn.cursor() as cursor:
             ensure_parts_schema(cursor)
+            ensure_workflow_created_by_columns(cursor)
             part = find_or_create_part_by_part_no(cursor, part_no)
+            created_by_user_id, created_by_username = created_by_values()
             cursor.execute("""
-                INSERT INTO production_plans (prod_date, zone, part_no, part_id, image_path, die_no, qty) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (date, zone, part['part_no'], part['id'], image_path, die_no, qty))
+                INSERT INTO production_plans
+                (prod_date, zone, part_no, part_id, image_path, die_no, qty, created_by_user_id, created_by_username)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (date, zone, part['part_no'], part['id'], image_path, die_no, qty, created_by_user_id, created_by_username))
         conn.commit()
         return jsonify({"success": True})
     except PartValidationError as e:
@@ -1045,6 +1200,7 @@ def add_setting_die():
         with conn.cursor() as cursor:
             # ตรวจสอบก่อนว่าเคยมีการบันทึก Setting Die ของ plan_id นี้ไปหรือยัง?
             ensure_parts_schema(cursor)
+            ensure_workflow_created_by_columns(cursor)
             part, _plan = validate_plan_part_consistency(cursor, plan_id, form.get('set-part-no'))
             cursor.execute("SELECT id FROM setting_dies WHERE plan_id = %s AND deleted_at IS NULL", (plan_id,))
             existing = cursor.fetchone()
@@ -1070,15 +1226,17 @@ def add_setting_die():
                 ))
             else:
                 # ถ้า "ยังไม่เคยมีข้อมูล" -> ให้เพิ่มข้อมูลใหม่ (INSERT)
+                created_by_user_id, created_by_username = created_by_values()
                 cursor.execute("""
                     INSERT INTO setting_dies 
-                    (plan_id, part_id, part_no, lot_no, die_no, plan_no, process_die, dh, spm, time_start, time_end, material, custom_time_1, custom_time_2, custom_time_3, custom_time_4, technician)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (plan_id, part_id, part_no, lot_no, die_no, plan_no, process_die, dh, spm, time_start, time_end, material, custom_time_1, custom_time_2, custom_time_3, custom_time_4, technician, created_by_user_id, created_by_username)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     plan_id, part['id'], part['part_no'], form.get('set-lot-no'), form.get('set-die-no'), form.get('set-plan-no'), form.get('set-process-die'),
                     empty_to_none(form.get('set-dh')), empty_to_none(form.get('set-spm')), format_datetime(form.get('set-time-start')), format_datetime(form.get('set-time-end')),
                     form.get('set-material'), format_datetime(form.get('custom-time-1')), format_datetime(form.get('custom-time-2')),
-                    format_datetime(form.get('custom-time-3')), format_datetime(form.get('custom-time-4')), form.get('set-technician')
+                    format_datetime(form.get('custom-time-3')), format_datetime(form.get('custom-time-4')), form.get('set-technician'),
+                    created_by_user_id, created_by_username
                 ))
                 
         conn.commit()
@@ -1255,6 +1413,7 @@ def create_qc_from_setting_die():
             if not plan:
                 return jsonify({"success": False, "message": "Active Setting Die plan not found"})
 
+            ensure_workflow_created_by_columns(cursor)
             part, _plan = validate_plan_part_consistency(cursor, plan.get('plan_id'), plan.get('part_no'))
 
             cursor.execute("""
@@ -1275,10 +1434,11 @@ def create_qc_from_setting_die():
                     "message": "This plan is already waiting in QC Line"
                 })
 
+            created_by_user_id, created_by_username = created_by_values()
             cursor.execute("""
                 INSERT INTO qc_inspections
-                (plan_id, part_id, lot_no, plan_no, part_no, time_start, time_end, percent_result, status, problem_area, problem_point, image_path, cause, solution)
-                VALUES (%s, %s, %s, %s, %s, NULL, NULL, NULL, %s, %s, NULL, NULL, NULL, NULL)
+                (plan_id, part_id, lot_no, plan_no, part_no, time_start, time_end, percent_result, status, problem_area, problem_point, image_path, cause, solution, created_by_user_id, created_by_username)
+                VALUES (%s, %s, %s, %s, %s, NULL, NULL, NULL, %s, %s, NULL, NULL, NULL, NULL, %s, %s)
             """, (
                 plan.get('plan_id'),
                 part['id'],
@@ -1287,6 +1447,8 @@ def create_qc_from_setting_die():
                 part['part_no'],
                 'Waiting',
                 'none',
+                created_by_user_id,
+                created_by_username,
             ))
             qc_id = cursor.lastrowid
         conn.commit()
@@ -1411,6 +1573,7 @@ def save_production_start():
         with conn.cursor() as cursor:
             ensure_production_starts_table(cursor)
             ensure_parts_schema(cursor)
+            ensure_workflow_created_by_columns(cursor)
             plan = get_production_start_plan(cursor, plan_no) or {}
             lot_no = form.get('start-lot-no') or plan.get('lot_no')
             part_no = form.get('start-part-no') or plan.get('part_no')
@@ -1458,10 +1621,12 @@ def save_production_start():
                     WHERE id=%s
                 """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, qty, time_start, start_id))
             else:
+                created_by_user_id, created_by_username = created_by_values()
                 cursor.execute("""
-                    INSERT INTO production_starts (plan_id, part_id, plan_no, lot_no, part_no, die_no, qty, time_start)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, qty, time_start))
+                    INSERT INTO production_starts
+                    (plan_id, part_id, plan_no, lot_no, part_no, die_no, qty, time_start, created_by_user_id, created_by_username)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, qty, time_start, created_by_user_id, created_by_username))
         conn.commit()
         return jsonify({"success": True})
     except PartValidationError as e:
@@ -1578,6 +1743,7 @@ def save_production_finish():
             ensure_production_starts_table(cursor)
             ensure_production_finishes_table(cursor)
             ensure_parts_schema(cursor)
+            ensure_workflow_created_by_columns(cursor)
             cursor.execute("""
                 SELECT plan_id, part_id, plan_no, lot_no, part_no, die_no, qty, confirm_status
                 FROM production_starts
@@ -1605,11 +1771,12 @@ def save_production_finish():
             plan_id = plan.get('plan_id')
             part, _plan = validate_plan_part_consistency(cursor, plan_id, part_no)
 
+            created_by_user_id, created_by_username = created_by_values()
             cursor.execute("""
                 INSERT INTO production_finishes
-                (plan_id, part_id, plan_no, lot_no, part_no, die_no, planned_qty, actual_qty, note, time_finish, hold_time, finish_status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
-            """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, planned_qty, actual_qty, note, time_finish, hold_time))
+                (plan_id, part_id, plan_no, lot_no, part_no, die_no, planned_qty, actual_qty, note, time_finish, hold_time, finish_status, created_by_user_id, created_by_username)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s)
+            """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, planned_qty, actual_qty, note, time_finish, hold_time, created_by_user_id, created_by_username))
 
         conn.commit()
         return jsonify({"success": True})
@@ -1684,6 +1851,7 @@ def create_production_start_from_qc():
         with conn.cursor() as cursor:
             ensure_production_starts_table(cursor)
             ensure_parts_schema(cursor)
+            ensure_workflow_created_by_columns(cursor)
             plan = get_production_start_plan(cursor, plan_no) or {}
             lot_no = plan.get('lot_no') or request.form.get('lot_no')
             part_no = plan.get('part_no') or request.form.get('part_no')
@@ -1701,10 +1869,12 @@ def create_production_start_from_qc():
                     WHERE id=%s
                 """, (plan_id, part['id'], lot_no, part['part_no'], die_no, qty, existing['id']))
             else:
+                created_by_user_id, created_by_username = created_by_values()
                 cursor.execute("""
-                    INSERT INTO production_starts (plan_id, part_id, plan_no, lot_no, part_no, die_no, qty, time_start)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, qty))
+                    INSERT INTO production_starts
+                    (plan_id, part_id, plan_no, lot_no, part_no, die_no, qty, time_start, created_by_user_id, created_by_username)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
+                """, (plan_id, part['id'], plan_no, lot_no, part['part_no'], die_no, qty, created_by_user_id, created_by_username))
         conn.commit()
         return jsonify({"success": True})
     except PartValidationError as e:
@@ -1731,19 +1901,22 @@ def add_qc():
     try:
         with conn.cursor() as cursor:
             ensure_parts_schema(cursor)
+            ensure_workflow_created_by_columns(cursor)
             plan = get_production_start_plan(cursor, form.get('qc-plan-no')) or {}
             plan_id = plan.get('plan_id')
             part_no = form.get('qc-part-no') or plan.get('part_no')
             part, _plan = validate_plan_part_consistency(cursor, plan_id, part_no)
+            created_by_user_id, created_by_username = created_by_values()
             cursor.execute("""
                 INSERT INTO qc_inspections 
-                (plan_id, part_id, lot_no, plan_no, part_no, time_start, time_end, percent_result, status, problem_area, problem_point, image_path, cause, solution)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (plan_id, part_id, lot_no, plan_no, part_no, time_start, time_end, percent_result, status, problem_area, problem_point, image_path, cause, solution, created_by_user_id, created_by_username)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 plan_id, part['id'], form.get('qc-lot-no'), form.get('qc-plan-no'), part['part_no'],
                 format_datetime(form.get('qc-time-start')), format_datetime(form.get('qc-time-end')),
                 empty_to_none(form.get('qc-percent')), form.get('qc-status'), form.get('qc-problem-area'), form.get('qc-problem-point'),
-                image_path, form.get('qc-cause'), form.get('qc-solution')
+                image_path, form.get('qc-cause'), form.get('qc-solution'),
+                created_by_user_id, created_by_username
             ))
         conn.commit()
         return jsonify({"success": True})

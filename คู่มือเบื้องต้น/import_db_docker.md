@@ -34,3 +34,20 @@ docker compose exec db sh -c 'mariadb -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_D
 docker compose restart app
 แล้วเปิดเว็บ:
 http://localhost:5000/app
+
+
+--------------------------------------------------------------------
+cd "path\to\project_for_nas_server"
+
+docker compose down -v
+
+docker compose up -d db
+
+Start-Sleep -Seconds 15
+
+docker compose cp .\inventory_db.sql db:/tmp/inventory_db.sql
+
+docker compose exec db sh -c 'mariadb -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" < /tmp/inventory_db.sql'
+
+docker compose up -d --build app
+--------------------------------------------------------------------

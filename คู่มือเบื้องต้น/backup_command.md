@@ -1,183 +1,112 @@
-## ใช้สำหรับดึงรูปออกมาจาก docker volume แล้วเอาไปเก็บไว้สักทีที่จะ backup
-----------------------------------------------------------
-docker compose cp app:/app/static/uploads .\uploads_export
-----------------------------------------------------------
+# Backup / Export Commands
 
-## คำสั่งลบ folder ที่ดึงมาจาก docker (ใช้หลังจากก๊อปปี้รูปไป backup แล้ว)
-Remove-Item .\uploads_export -Recurse -Force
+## 1. Backup ทั้งหมด: DB SQL + Uploads + DB Excel
 
-
-
-###### Backup Guide สำหรับ Docker Project #######
-
-คู่มือนี้ใช้สำหรับ backup ข้อมูลสำคัญของระบบที่รันด้วย Docker Compose
-สิ่งที่ต้อง backup มี 2 ส่วนหลัก:
-
-1. Database (`inventory_db.sql`)
-2. รูปภาพ / ไฟล์ upload (`uploads`)
-
-> สำคัญ: ต้อง backup ทั้ง 2 อย่างคู่กัน เพราะ database เก็บชื่อไฟล์รูปไว้ ส่วนไฟล์รูปจริงอยู่ใน uploads
-
----
-
-## 1. เข้าโฟลเดอร์โปรเจกต์
-
-ให้เปิด PowerShell แล้วเข้า root project ที่มีไฟล์ `docker-compose.yml`
-
-```powershell
-cd "C:\Users\User\Desktop\project_for_nas_server"
-```
-
----
-
-## 2. สร้างโฟลเดอร์ backup ตามวันเวลา
-
-```powershell
-$ts = Get-Date -Format "yyyyMMdd_HHmmss"
-New-Item -ItemType Directory -Force ".\backups\$ts"
-```
-
-ตัวอย่างผลลัพธ์:
-
-```text
-backups/
-  20260622_104500/
-```
-
----
-
-## 3. Backup Database เป็นไฟล์ `.sql`
-
-```powershell
-docker compose exec -T db sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > ".\backups\$ts\inventory_db.sql"
-```
-
-หลังรันเสร็จ จะได้ไฟล์:
-
-```text
-backups/<วันเวลา>/inventory_db.sql
-```
-
-ไฟล์นี้คือ backup database ทั้งหมดของระบบ
-
----
-
-## 4. Backup รูปภาพ / uploads
-
-```powershell
-docker compose cp app:/app/static/uploads ".\backups\$ts\uploads"
-```
-
-หลังรันเสร็จ จะได้โฟลเดอร์:
-
-```text
-backups/<วันเวลา>/uploads
-```
-
-ข้างในจะเป็นรูปภาพหรือไฟล์ upload ทั้งหมดที่ user เคย upload เข้าเว็บ
-
----
-
-## 5. เช็กไฟล์ backup
-
-```powershell
-Get-ChildItem ".\backups\$ts"
-```
-
-ควรเห็นประมาณนี้:
-
-```text
-inventory_db.sql
-uploads
-```
-
----
-
-###### ชุดคำสั่ง Backup ทั้งหมดแบบใช้งานจริง ######
-
-```powershell
+# powershell
+---------------------------------------------------------------------------------------------------
 cd "C:\Users\User\Desktop\project_for_nas_server"
 
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"
-New-Item -ItemType Directory -Force ".\backups\$ts"
+$backupDir = ".\backups\$ts"
+$containerExcelDir = "/app/backups/$ts/db_excel"
 
-docker compose exec -T db sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > ".\backups\$ts\inventory_db.sql"
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+New-Item -ItemType Directory -Force -Path "$backupDir\db_excel" | Out-Null
 
-docker compose cp app:/app/static/uploads ".\backups\$ts\uploads"
+docker compose exec -T db sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > "$backupDir\inventory_db.sql"
 
-Get-ChildItem ".\backups\$ts"
-```
-## หลังจาก นำ folder : backups ไปทำสำเนาไว้ที่อื่นแล้ว ก็สามารถลบ folder นี้ที่อยู่ในไฟล์ project ได้เลย
-Remove-Item .\backups -Recurse -Force
----
+docker compose cp app:/app/static/uploads "$backupDir\uploads"
 
+docker compose exec -T -e EXPORT_EXCEL_DIR="$containerExcelDir" app python scripts/export_db_to_excel.py
 
+Get-ChildItem -Recurse $backupDir
+---------------------------------------------------------------------------------------------------
 
-
-## ผลลัพธ์ที่ควรได้
+ผลลัพธ์:
 
 ```text
 backups/
-  20260622_104500/
+  YYYYMMDD_HHMMSS/
     inventory_db.sql
     uploads/
-      image1.png
-      image2.jpg
-      ...
+    db_excel/
+      database_export_YYYYMMDD_HHMMSS.xlsx
 ```
 
 ---
 
-## คำเตือนสำคัญ
-
-ห้ามใช้คำสั่งนี้ถ้าไม่ต้องการลบข้อมูล database:
+## 2. Backup เฉพาะ DB SQL
 
 ```powershell
-docker compose down -v
+cd "C:\Users\User\Desktop\project_for_nas_server"
+
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupDir = ".\backups\$ts"
+
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+
+docker compose exec -T db sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' > "$backupDir\inventory_db.sql"
+
+Get-ChildItem $backupDir
 ```
 
-เพราะ `-v` จะลบ Docker volume ซึ่งอาจทำให้ข้อมูล database และ uploads หายได้
+---
 
-ถ้าต้องการหยุดระบบเฉย ๆ ให้ใช้:
+## 3. Export เฉพาะ DB Excel
 
 ```powershell
-docker compose down
+cd "C:\Users\User\Desktop\project_for_nas_server"
+
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$excelDir = ".\backups\$ts\db_excel"
+$containerExcelDir = "/app/backups/$ts/db_excel"
+
+New-Item -ItemType Directory -Force -Path $excelDir | Out-Null
+
+docker compose exec -T -e EXPORT_EXCEL_DIR="$containerExcelDir" app python scripts/export_db_to_excel.py
+
+Get-ChildItem -Recurse ".\backups\$ts"
+```
+
+ไฟล์จะอยู่ที่:
+
+```text
+export_excel/
+  database_export_YYYYMMDD_HHMMSS.xlsx
 ```
 
 ---
 
-## ควรเก็บ backup ไว้ที่ไหน
+## 4. Backup เฉพาะ Uploads / รูป
 
-หลัง backup เสร็จ ควร copy โฟลเดอร์ใน `backups/<วันเวลา>` ไปเก็บที่อื่น เช่น:
+```powershell
+cd "C:\Users\User\Desktop\project_for_nas_server"
 
-* External Drive
-* NAS backup folder
-* Google Drive / OneDrive
-* เครื่อง backup แยก
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$backupDir = ".\backups\$ts"
 
-ตัวอย่างโฟลเดอร์ที่ต้องเก็บ:
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 
-```text
-backups/20260622_104500/
-```
+docker compose cp app:/app/static/uploads "$backupDir\uploads"
 
-ในโฟลเดอร์นี้ต้องมีทั้ง:
-
-```text
-inventory_db.sql
-uploads/
+Get-ChildItem -Recurse $backupDir
 ```
 
 ---
 
-## สรุป
+## 5. ลบโฟลเดอร์ backups หลังนำไปสำรองที่อื่นแล้ว
 
-ทุกครั้งที่ backup ให้เก็บคู่กันเสมอ:
+```powershell
+cd "C:\Users\User\Desktop\project_for_nas_server"
 
-```text
-Database  = inventory_db.sql
-Uploads   = uploads/
+Remove-Item .\backups -Recurse -Force
 ```
 
-ถ้ามีแค่ database แต่ไม่มี uploads รูปจะเปิดไม่ได้
-ถ้ามีแค่ uploads แต่ไม่มี database จะไม่รู้ว่ารูปไหนผูกกับข้อมูลรายการไหน
+---
+
+## หมายเหตุ
+
+* `backups/` ใช้สำหรับ backup จริง เช่น DB SQL และ uploads
+* `export_excel/` ใช้สำหรับ export DB เป็น Excel เพื่อเปิดดูข้อมูล
+* ไฟล์ใน `backups/` และ `export_excel/` ไม่ควร commit ขึ้น Git
+* ก่อนลบ `backups/` ต้องแน่ใจว่า copy ไปเก็บที่อื่นแล้ว
