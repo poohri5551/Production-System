@@ -1,7 +1,10 @@
 import os
+import sys
+import uuid
 from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, session, g, has_request_context
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
 import pymysql
 from permissions import (
     VALID_ROLES,
@@ -28,6 +31,7 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'inventory-local-dev-secret-
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
+    MAX_CONTENT_LENGTH=15 * 1024 * 1024,
 )
 
 # --- ตั้งค่าอัปโหลดไฟล์รูปภาพ ---
@@ -37,6 +41,8 @@ if not os.path.isabs(UPLOAD_FOLDER):
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_UPLOAD_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp', 'pdf'}
+GENERIC_ERROR_MESSAGE = "เกิดข้อผิดพลาด กรุณาติดต่อผู้ดูแลระบบ"
 
 VUE_DIST_FOLDER = os.path.join(app.root_path, 'frontend', 'dist')
 VUE_ASSETS_FOLDER = os.path.join(VUE_DIST_FOLDER, 'assets')
@@ -55,6 +61,63 @@ def get_db_connection():
     return pymysql.connect(**db_config)
 
 ALLOWED_USER_ROLES = VALID_ROLES
+
+class UploadValidationError(ValueError):
+    pass
+
+def error_response(message=GENERIC_ERROR_MESSAGE, status=500):
+    if message == GENERIC_ERROR_MESSAGE:
+        current_error = sys.exc_info()[1]
+        if current_error:
+            log_exception(request.endpoint or 'api', current_error)
+    return jsonify({"success": False, "message": message}), status
+
+def log_exception(context, error):
+    app.logger.exception("%s: %s", context, error)
+
+def allowed_file(filename):
+    if not filename or '.' not in filename:
+        return False
+    extension = filename.rsplit('.', 1)[1].lower()
+    return extension in ALLOWED_UPLOAD_EXTENSIONS
+
+def generate_safe_upload_filename(original_filename):
+    cleaned_name = secure_filename(original_filename or '')
+    if not allowed_file(cleaned_name):
+        raise UploadValidationError("ไฟล์ไม่รองรับ")
+    extension = cleaned_name.rsplit('.', 1)[1].lower()
+    return f"{uuid.uuid4().hex}.{extension}"
+
+def save_uploaded_file(file_storage):
+    if not file_storage or not file_storage.filename:
+        return None
+    filename = generate_safe_upload_filename(file_storage.filename)
+    upload_root = os.path.realpath(app.config['UPLOAD_FOLDER'])
+    save_path = os.path.realpath(os.path.join(upload_root, filename))
+    if os.path.commonpath([upload_root, save_path]) != upload_root:
+        raise UploadValidationError("ไฟล์ไม่รองรับ")
+    os.makedirs(upload_root, exist_ok=True)
+    file_storage.save(save_path)
+    return filename
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_entity_too_large(error):
+    if request.path.startswith('/api/'):
+        return error_response("ไฟล์มีขนาดใหญ่เกินไป", 413)
+    return "ไฟล์มีขนาดใหญ่เกินไป", 413
+
+@app.errorhandler(404)
+def handle_not_found(error):
+    if request.path.startswith('/api/'):
+        return error_response("ไม่พบข้อมูล", 404)
+    return error
+
+@app.errorhandler(500)
+def handle_internal_server_error(error):
+    if request.path.startswith('/api/'):
+        app.logger.exception("Unhandled API error: %s", error)
+        return error_response()
+    return error
 
 def format_datetime(dt_str):
     if dt_str: return dt_str.replace('T', ' ') + ':00'
@@ -1086,7 +1149,7 @@ def get_job_detail(job_id):
             
             return jsonify({"success": True, "job": job, "setting": setting})
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1099,12 +1162,10 @@ def add_production():
     qty = request.form.get('prod-qty')
     
     image_path = None
-    if 'prod-image' in request.files:
-        file = request.files['prod-image']
-        if file.filename != '':
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            image_path = filename
+    try:
+        image_path = save_uploaded_file(request.files.get('prod-image'))
+    except UploadValidationError as e:
+        return error_response(str(e), 400)
 
     conn = get_db_connection()
     try:
@@ -1125,7 +1186,7 @@ def add_production():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1160,7 +1221,7 @@ def delete_job(job_id):
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1187,7 +1248,7 @@ def bulk_delete_jobs():
         return jsonify({"success": True, "deleted": len(ids)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1246,7 +1307,7 @@ def add_setting_die():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1463,7 +1524,7 @@ def create_qc_from_setting_die():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1513,7 +1574,7 @@ def delete_production_start(start_id):
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1529,7 +1590,7 @@ def confirm_production_start(start_id):
         return jsonify({"success": True})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1556,7 +1617,7 @@ def bulk_delete_production_start():
         return jsonify({"success": True, "deleted": len(ids)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1634,7 +1695,7 @@ def save_production_start():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1785,7 +1846,7 @@ def save_production_finish():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1809,7 +1870,7 @@ def confirm_production_finish(finish_id):
         return jsonify({"success": True})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1836,7 +1897,7 @@ def bulk_delete_production_finish():
         return jsonify({"success": True, "deleted": len(ids)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1882,7 +1943,7 @@ def create_production_start_from_qc():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1890,12 +1951,10 @@ def create_production_start_from_qc():
 def add_qc():
     form = request.form
     image_path = None
-    if 'qc-image' in request.files:
-        file = request.files['qc-image']
-        if file.filename != '':
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            image_path = filename
+    try:
+        image_path = save_uploaded_file(request.files.get('qc-image'))
+    except UploadValidationError as e:
+        return error_response(str(e), 400)
 
     conn = get_db_connection()
     try:
@@ -1925,7 +1984,7 @@ def add_qc():
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1942,12 +2001,12 @@ def update_qc(qc_id):
                 return jsonify({"success": False, "message": "ไม่พบข้อมูล QC"})
 
             image_path = existing.get('image_path')
-            if 'qc-image' in request.files:
-                file = request.files['qc-image']
-                if file.filename != '':
-                    filename = secure_filename(file.filename)
-                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    image_path = filename
+            try:
+                uploaded_image_path = save_uploaded_file(request.files.get('qc-image'))
+                if uploaded_image_path:
+                    image_path = uploaded_image_path
+            except UploadValidationError as e:
+                return error_response(str(e), 400)
 
             plan = get_production_start_plan(cursor, form.get('qc-plan-no')) or {}
             plan_id = plan.get('plan_id')
@@ -1974,7 +2033,7 @@ def update_qc(qc_id):
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -1993,7 +2052,7 @@ def delete_qc(qc_id):
         return jsonify({"success": True})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2019,7 +2078,7 @@ def bulk_delete_qc():
         return jsonify({"success": True, "deleted": len(ids)})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2103,7 +2162,7 @@ def update_part_by_part_no_api():
         return jsonify({"success": False, "message": str(e)}), status_code
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2124,7 +2183,7 @@ def soft_delete_part_by_part_no_api():
         return jsonify({"success": False, "message": str(e)}), status_code
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2180,7 +2239,7 @@ def update_user_role(user_id):
         return jsonify({"success": True})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2217,7 +2276,7 @@ def delete_user(user_id):
         })
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2257,7 +2316,7 @@ def reset_user_password(user_id):
         })
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
@@ -2290,7 +2349,7 @@ def create_user():
         return jsonify({"success": True})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": str(e)})
+        return error_response()
     finally:
         conn.close()
 
