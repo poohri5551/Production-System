@@ -1,4 +1,6 @@
 <script setup>
+import WorkflowStatusBadge from './WorkflowStatusBadge.vue'
+
 defineProps({
   finishes: {
     type: Array,
@@ -12,9 +14,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  highlightedId: { type: [Number, String], default: null },
 })
 
-const emit = defineEmits(['toggle-select', 'confirm'])
+const emit = defineEmits(['toggle-select', 'confirm', 'timestamps'])
 
 function formatDateTime(value) {
   if (!value) return '-'
@@ -32,7 +35,6 @@ function formatDateTime(value) {
         <thead class="bg-blue-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
             <th v-if="canManageProductionFinish" class="px-4 py-4"><span class="sr-only">Select</span></th>
-            <th class="px-4 py-4">Plan No.</th>
             <th class="px-4 py-4">Lot No.</th>
             <th class="px-4 py-4">Part No.</th>
             <th class="px-4 py-4">Die No.</th>
@@ -41,11 +43,12 @@ function formatDateTime(value) {
             <th class="px-4 py-4">Hold Time</th>
             <th class="px-4 py-4">Finish Time</th>
             <th class="px-4 py-4">Note</th>
+            <th class="px-4 py-4">State</th>
             <th v-if="canManageProductionFinish" class="px-4 py-4">Manage</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="item in finishes" :key="item.id" class="transition hover:bg-blue-50/50">
+          <tr v-for="item in finishes" :id="`production-finish-row-${item.id}`" :key="item.id" class="transition duration-700 hover:bg-blue-50/50" :class="Number(highlightedId) === Number(item.id) ? 'bg-indigo-100 ring-2 ring-inset ring-indigo-500' : ''">
             <td v-if="canManageProductionFinish" class="px-4 py-4">
               <input
                 type="checkbox"
@@ -54,8 +57,7 @@ function formatDateTime(value) {
                 @change="emit('toggle-select', item.id)"
               />
             </td>
-            <td class="px-4 py-4 font-medium text-slate-900">{{ item.plan_no || '-' }}</td>
-            <td class="px-4 py-4 text-slate-700">{{ item.lot_no || '-' }}</td>
+            <td class="px-4 py-4 font-medium text-slate-900">{{ item.lot_no || '-' }}</td>
             <td class="px-4 py-4 text-slate-700">{{ item.part_no || '-' }}</td>
             <td class="px-4 py-4 text-slate-700">{{ item.die_no || '-' }}</td>
             <td class="px-4 py-4 text-slate-700">{{ item.planned_qty || '-' }}</td>
@@ -63,7 +65,15 @@ function formatDateTime(value) {
             <td class="whitespace-nowrap px-4 py-4 text-slate-700">{{ formatDateTime(item.hold_time) }}</td>
             <td class="whitespace-nowrap px-4 py-4 text-slate-700">{{ formatDateTime(item.time_finish) }}</td>
             <td class="max-w-xs truncate px-4 py-4 text-slate-700">{{ item.note || '-' }}</td>
+            <td class="px-4 py-4"><WorkflowStatusBadge stage="Production Finish" :status="item.finish_status" /></td>
             <td v-if="canManageProductionFinish" class="px-4 py-4">
+              <button
+                type="button"
+                class="mr-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                @click="emit('timestamps', item)"
+              >
+                Timestamps
+              </button>
               <button
                 v-if="item.finish_status === 'confirmed'"
                 type="button"

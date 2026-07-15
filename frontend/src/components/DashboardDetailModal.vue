@@ -1,7 +1,9 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import WorkflowStatusBadge from './WorkflowStatusBadge.vue'
+import { nextActionForItem, normalizeWorkflowValue } from '../constants/workflowStatus'
 
-defineProps({
+const props = defineProps({
   detail: {
     type: Object,
     required: true,
@@ -10,6 +12,39 @@ defineProps({
 
 const emit = defineEmits(['close'])
 const expandedItems = ref(new Set())
+
+const detailItem = computed(() => ({
+  current_step: props.detail.current_step,
+  status: props.detail.status,
+  setting_die_progress: props.detail.setting_die_progress,
+}))
+
+const workflowProgress = computed(() => {
+  const timeline = props.detail.timeline || []
+  const current = normalizeWorkflowValue(props.detail.current_step)
+  const latestStatus = (prefix) => [...timeline].reverse().find((item) => normalizeWorkflowValue(item.step).startsWith(prefix))?.status
+  const setting = props.detail.setting_die_progress || {}
+  const settingComplete = Number(setting.total || 0) > 0 && Number(setting.completed || 0) >= Number(setting.total || 0)
+  const qcComplete = ['pass', 'passed'].includes(normalizeWorkflowValue(latestStatus('qc inspection')))
+  const startComplete = normalizeWorkflowValue(latestStatus('production start')) === 'confirmed'
+  const finishComplete = normalizeWorkflowValue(latestStatus('production finish')) === 'confirmed'
+  const definitions = [
+    { key: 'plan created', label: 'Plan Created', complete: true },
+    { key: 'setting die', label: setting.total ? `Setting Die ${setting.completed || 0} / ${setting.total}` : 'Setting Die', complete: settingComplete },
+    { key: 'qc', label: 'QC Inspection', complete: qcComplete },
+    { key: 'production start', label: 'Production Start', complete: startComplete },
+    { key: 'production finish', label: 'Production Finish', complete: finishComplete },
+    { key: 'completed', label: 'Completed', complete: Boolean(props.detail.is_finished) },
+  ]
+  return definitions.map((step) => ({
+    ...step,
+    state: step.complete && step.key === 'completed'
+      ? 'complete'
+      : step.key === current || (step.key === 'plan created' && current === 'not started')
+      ? 'current'
+      : step.complete ? 'complete' : 'future',
+  }))
+})
 
 function formatDateTime(value) {
   if (!value) return '-'
@@ -56,23 +91,6 @@ function displayValue(row) {
   return value
 }
 
-function statusClass(status) {
-  const normalized = String(status || '').toLowerCase()
-  if (['completed', 'confirmed', 'pass', 'finished'].includes(normalized)) return 'bg-emerald-50 text-emerald-700'
-  if (['waiting', 'pending', 'wait'].includes(normalized)) return 'bg-amber-50 text-amber-700'
-  if (['fail', 'failed'].includes(normalized)) return 'bg-red-50 text-red-700'
-  return 'bg-blue-50 text-blue-700'
-}
-
-function stepClass(step) {
-  const normalized = String(step || '').toLowerCase()
-  if (normalized.includes('completed')) return 'bg-emerald-50 text-emerald-700'
-  if (normalized.includes('finish')) return 'bg-indigo-50 text-indigo-700'
-  if (normalized.includes('start')) return 'bg-blue-50 text-blue-700'
-  if (normalized.includes('qc')) return 'bg-sky-50 text-sky-700'
-  if (normalized.includes('setting')) return 'bg-violet-50 text-violet-700'
-  return 'bg-slate-100 text-slate-600'
-}
 </script>
 
 <template>
@@ -81,14 +99,10 @@ function stepClass(step) {
       <div class="flex flex-col gap-4 border-b border-blue-100 bg-white/95 p-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p class="text-sm font-medium uppercase tracking-[0.22em] text-blue-600">Part / Plan timeline</p>
-          <h2 class="mt-2 text-2xl font-semibold text-slate-950">{{ detail.plan?.plan_no || '-' }}</h2>
+          <h2 class="mt-2 text-2xl font-semibold text-slate-950">{{ detail.plan?.lot_no || '-' }}</h2>
           <div class="mt-3 flex flex-wrap gap-2">
-            <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" :class="stepClass(detail.current_step)">
-              {{ detail.current_step || '-' }}
-            </span>
-            <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" :class="statusClass(detail.status)">
-              {{ detail.status || '-' }}
-            </span>
+            <span><span class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-slate-400">Current Stage</span><WorkflowStatusBadge kind="stage" :stage="detail.current_step" /></span>
+            <span><span class="mb-1 block text-[10px] font-medium uppercase tracking-wide text-slate-400">State</span><WorkflowStatusBadge :stage="detail.current_step" :status="detail.status" :item="detailItem" /></span>
           </div>
         </div>
         <button type="button" class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-500 hover:bg-slate-200" @click="emit('close')">
@@ -99,8 +113,8 @@ function stepClass(step) {
       <div class="space-y-6 overflow-y-auto p-6">
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div class="rounded-2xl bg-blue-50 p-4">
-            <p class="text-xs text-slate-500">Plan No.</p>
-            <p class="font-semibold text-slate-900">{{ detail.plan?.plan_no || '-' }}</p>
+            <p class="text-xs text-slate-500">Lot No.</p>
+            <p class="font-semibold text-slate-900">{{ detail.plan?.lot_no || '-' }}</p>
           </div>
           <div class="rounded-2xl bg-blue-50 p-4">
             <p class="text-xs text-slate-500">Part No.</p>
@@ -114,6 +128,20 @@ function stepClass(step) {
             <p class="text-xs text-slate-500">Zone</p>
             <p class="font-semibold text-slate-900">{{ detail.plan?.zone || '-' }}</p>
           </div>
+        </div>
+
+        <div class="rounded-3xl border border-blue-100 bg-white p-5">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h3 class="text-lg font-semibold text-slate-950">Workflow progress</h3>
+            <p class="text-sm text-slate-600"><span class="font-medium">Next Action:</span> {{ nextActionForItem(detailItem) }}</p>
+          </div>
+          <ol class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <li v-for="step in workflowProgress" :key="step.key" class="rounded-2xl border p-3" :class="step.state === 'complete' ? 'border-emerald-200 bg-emerald-50' : step.state === 'current' ? 'border-blue-300 bg-blue-50 ring-2 ring-blue-100' : 'border-slate-200 bg-slate-50'">
+              <span class="grid h-7 w-7 place-items-center rounded-full text-xs font-bold" :class="step.state === 'complete' ? 'bg-emerald-600 text-white' : step.state === 'current' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'">{{ step.state === 'complete' ? '✓' : step.state === 'current' ? '•' : '○' }}</span>
+              <span class="mt-2 block text-sm font-semibold" :class="step.state === 'future' ? 'text-slate-500' : 'text-slate-900'">{{ step.label }}</span>
+              <span class="mt-1 block text-xs capitalize text-slate-500">{{ step.state }}</span>
+            </li>
+          </ol>
         </div>
 
         <div class="rounded-3xl border border-blue-100 bg-white p-5">
@@ -137,9 +165,7 @@ function stepClass(step) {
                     </span>
                   </span>
                 </span>
-                <span class="inline-flex w-fit rounded-full px-3 py-1 text-xs font-semibold" :class="statusClass(item.status)">
-                  {{ item.status || '-' }}
-                </span>
+                <WorkflowStatusBadge :stage="item.step" :status="item.status" />
               </button>
               <div class="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 lg:grid-cols-4">
                 <span>Start: {{ formatDateTime(item.time_start) }}</span>

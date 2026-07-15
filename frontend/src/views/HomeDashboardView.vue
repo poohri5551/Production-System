@@ -1,7 +1,12 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { getDashboardPartsStatus, getDashboardPartStatusDetail } from '../api/client'
+import DashboardBucketModal from '../components/DashboardBucketModal.vue'
 import DashboardDetailModal from '../components/DashboardDetailModal.vue'
+import WorkflowStatusBadge from '../components/WorkflowStatusBadge.vue'
+import { DASHBOARD_BUCKETS, nextActionForItem, workflowDestination } from '../constants/workflowStatus'
+
+const emit = defineEmits(['navigate-workflow'])
 
 const summary = reactive({
   total: 0,
@@ -13,6 +18,8 @@ const summary = reactive({
 const items = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
+const lastRefreshed = ref(null)
+const selectedBucketKey = ref('')
 const detailState = reactive({
   isOpen: false,
   isLoading: false,
@@ -20,27 +27,12 @@ const detailState = reactive({
   detail: null,
 })
 
-const cards = [
-  { key: 'total', label: 'Total', tone: 'text-slate-950' },
-  { key: 'waiting', label: 'Waiting', tone: 'text-amber-700' },
-  { key: 'in_progress', label: 'In Progress', tone: 'text-blue-700' },
-  { key: 'qc', label: 'QC', tone: 'text-sky-700' },
-  { key: 'completed', label: 'Completed', tone: 'text-emerald-700' },
-]
+const cards = DASHBOARD_BUCKETS
+const selectedBucket = computed(() => cards.find((card) => card.key === selectedBucketKey.value) || null)
 
 onMounted(() => {
   loadDashboard()
 })
-
-function resetSummary() {
-  Object.assign(summary, {
-    total: 0,
-    waiting: 0,
-    in_progress: 0,
-    qc: 0,
-    completed: 0,
-  })
-}
 
 async function loadDashboard() {
   if (isLoading.value) return
@@ -51,8 +43,6 @@ async function loadDashboard() {
     const data = await getDashboardPartsStatus()
     if (!data.success) {
       errorMessage.value = data.message || 'Cannot load dashboard'
-      items.value = []
-      resetSummary()
       return
     }
     Object.assign(summary, {
@@ -63,13 +53,36 @@ async function loadDashboard() {
       completed: data.summary?.completed || 0,
     })
     items.value = data.items || []
+    lastRefreshed.value = new Date()
   } catch (error) {
     errorMessage.value = error.message || 'Cannot connect to backend'
-    items.value = []
-    resetSummary()
   } finally {
     isLoading.value = false
   }
+}
+
+function openBucket(bucketKey) {
+  selectedBucketKey.value = bucketKey
+}
+
+function closeBucket() {
+  selectedBucketKey.value = ''
+}
+
+function selectBucketItem(item) {
+  const destination = workflowDestination(item)
+  closeBucket()
+  if (destination.type === 'detail') {
+    openDetail(item.plan_id)
+    return
+  }
+  emit('navigate-workflow', {
+    menu: destination.menu,
+    planId: item.plan_id,
+    lotNo: item.lot_no,
+    currentStep: item.current_step,
+    token: `${Date.now()}-${item.plan_id}`,
+  })
 }
 
 async function openDetail(planId) {
@@ -107,22 +120,9 @@ function formatDateTime(value) {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function statusClass(status) {
-  const normalized = String(status || '').toLowerCase()
-  if (['completed', 'confirmed', 'pass', 'finished'].includes(normalized)) return 'bg-emerald-50 text-emerald-700'
-  if (['waiting', 'pending', 'wait'].includes(normalized)) return 'bg-amber-50 text-amber-700'
-  if (['fail', 'failed'].includes(normalized)) return 'bg-red-50 text-red-700'
-  return 'bg-blue-50 text-blue-700'
-}
-
-function stepClass(step) {
-  const normalized = String(step || '').toLowerCase()
-  if (normalized.includes('completed')) return 'bg-emerald-50 text-emerald-700'
-  if (normalized.includes('finish')) return 'bg-indigo-50 text-indigo-700'
-  if (normalized.includes('start')) return 'bg-blue-50 text-blue-700'
-  if (normalized.includes('qc')) return 'bg-sky-50 text-sky-700'
-  if (normalized.includes('setting')) return 'bg-violet-50 text-violet-700'
-  return 'bg-slate-100 text-slate-600'
+function formatRefreshTime(value) {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium' }).format(value)
 }
 </script>
 
@@ -136,34 +136,36 @@ function stepClass(step) {
           ติดตามสถานะของแผนการผลิตว่าอยู่ในขั้นตอนใด 
         </p>
       </div>
-      <button
-        type="button"
-        class="grid h-11 w-11 place-items-center rounded-2xl border border-blue-100 text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-        :disabled="isLoading"
-        aria-label="Refresh dashboard"
-        title="Refresh"
-        @click="loadDashboard"
-      >
-        <svg class="h-5 w-5" :class="{ 'animate-spin': isLoading }" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <div class="flex items-center gap-3">
+        <p v-if="lastRefreshed" class="text-sm text-slate-500">Last refreshed {{ formatRefreshTime(lastRefreshed) }}</p>
+        <button
+          type="button"
+          class="grid h-11 w-11 place-items-center rounded-2xl border border-blue-100 text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+          :disabled="isLoading"
+          aria-label="Refresh dashboard"
+          title="Refresh"
+          @click="loadDashboard"
+        >
+          <svg class="h-5 w-5" :class="{ 'animate-spin': isLoading }" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M20 6v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           <path d="M4 18v-5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           <path d="M18.5 9A7 7 0 0 0 6.4 6.2L4 8.5M5.5 15A7 7 0 0 0 17.6 17.8L20 15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <article v-for="card in cards" :key="card.key" class="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">{{ card.label }}</p>
-        <p class="mt-2 text-3xl font-semibold" :class="card.tone">{{ summary[card.key] }}</p>
-      </article>
+      <button v-for="card in cards" :key="card.key" type="button" class="group cursor-pointer rounded-3xl border border-blue-100 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100" :aria-label="`Open ${card.label} Lots, ${summary[card.key]} items`" @click="openBucket(card.key)">
+        <span class="flex items-start justify-between gap-3"><span class="text-sm text-slate-500">{{ card.label }}</span><span class="text-xs font-semibold text-blue-600 opacity-70 transition group-hover:opacity-100">ดูรายการ</span></span>
+        <span class="mt-2 block text-3xl font-semibold" :class="card.tone">{{ summary[card.key] }}</span>
+        <span class="mt-2 block text-xs leading-5 text-slate-500">{{ card.description }}</span>
+      </button>
     </div>
 
-    <p v-if="errorMessage" class="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-      {{ errorMessage }}
-    </p>
+    <div v-if="errorMessage" class="flex flex-col gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between"><span>{{ errorMessage }}</span><button type="button" :disabled="isLoading" class="font-semibold underline underline-offset-2 disabled:opacity-60" @click="loadDashboard">Retry</button></div>
 
-    <div v-if="isLoading" class="shell-card p-10 text-center text-slate-500">
+    <div v-if="isLoading && !items.length" class="shell-card p-10 text-center text-slate-500">
       Loading dashboard...
     </div>
     <div v-else-if="!items.length" class="shell-card p-10 text-center">
@@ -177,32 +179,30 @@ function stepClass(step) {
         <table class="min-w-full divide-y divide-blue-100 text-left text-sm">
           <thead class="bg-blue-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th class="px-4 py-4">Plan No.</th>
+              <th class="px-4 py-4">Lot No.</th>
               <th class="px-4 py-4">Part No.</th>
               <th class="px-4 py-4">Die No.</th>
               <th class="px-4 py-4">Zone</th>
-              <th class="px-4 py-4">Current Step</th>
-              <th class="px-4 py-4">Status</th>
+              <th class="px-4 py-4">Current Stage</th>
+              <th class="px-4 py-4">State</th>
+              <th class="px-4 py-4">Next Action</th>
               <th class="px-4 py-4">Last Updated</th>
               <th class="px-4 py-4">Action</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr v-for="item in items" :key="item.plan_id" class="cursor-pointer transition hover:bg-blue-50/50" @click="openDetail(item.plan_id)">
-              <td class="px-4 py-4 font-semibold text-slate-900">{{ item.plan_no || '-' }}</td>
+              <td class="px-4 py-4 font-semibold text-slate-900">{{ item.lot_no || '-' }}</td>
               <td class="px-4 py-4 text-slate-700">{{ item.part_no || '-' }}</td>
               <td class="px-4 py-4 text-slate-700">{{ item.die_no || '-' }}</td>
               <td class="px-4 py-4 text-slate-700">{{ item.zone || '-' }}</td>
               <td class="px-4 py-4">
-                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" :class="stepClass(item.current_step)">
-                  {{ item.current_step || '-' }}
-                </span>
+                <WorkflowStatusBadge kind="stage" :stage="item.current_step" />
               </td>
               <td class="px-4 py-4">
-                <span class="inline-flex rounded-full px-3 py-1 text-xs font-semibold" :class="statusClass(item.status)">
-                  {{ item.status || '-' }}
-                </span>
+                <WorkflowStatusBadge :stage="item.current_step" :status="item.status" :item="item" />
               </td>
+              <td class="max-w-xs px-4 py-4 font-medium text-slate-700">{{ nextActionForItem(item) }}</td>
               <td class="whitespace-nowrap px-4 py-4 text-slate-700">{{ formatDateTime(item.last_updated) }}</td>
               <td class="px-4 py-4">
                 <button type="button" class="rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50" @click.stop="openDetail(item.plan_id)">
@@ -229,5 +229,6 @@ function stepClass(step) {
     </div>
 
     <DashboardDetailModal v-if="detailState.isOpen && detailState.detail && !detailState.isLoading && !detailState.error" :detail="detailState.detail" @close="closeDetail" />
+    <DashboardBucketModal v-if="selectedBucket" :bucket="selectedBucket" :items="items" @close="closeBucket" @select="selectBucketItem" />
   </section>
 </template>

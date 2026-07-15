@@ -5,6 +5,8 @@ import { createProductionJob } from '../api/client'
 const emit = defineEmits(['close', 'saved'])
 
 const form = reactive({
+  lotNo: '',
+  processDieCount: '1',
   date: '',
   zone: '',
   partNo: '',
@@ -21,6 +23,8 @@ function handleFileChange(event) {
 }
 
 function resetForm() {
+  form.lotNo = ''
+  form.processDieCount = '1'
   form.date = ''
   form.zone = ''
   form.partNo = ''
@@ -35,7 +39,16 @@ async function submitForm() {
   errorMessage.value = ''
   isSubmitting.value = true
 
+  const processDieCount = String(form.processDieCount || '').trim()
+  if (!/^[1-9]\d*$/.test(processDieCount)) {
+    errorMessage.value = 'Process Die ต้องเป็นตัวเลขจำนวนเต็มมากกว่า 0'
+    isSubmitting.value = false
+    return
+  }
+
   const formData = new FormData()
+  formData.append('prod-lot-no', form.lotNo.trim())
+  formData.append('prod-process-die-count', processDieCount)
   formData.append('prod-date', form.date)
   formData.append('prod-zone', form.zone)
   formData.append('prod-part-no', form.partNo)
@@ -76,6 +89,16 @@ async function submitForm() {
 
       <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="submitForm">
         <label class="block">
+          <span class="text-sm font-medium text-slate-700">Lot No.</span>
+          <input v-model="form.lotNo" name="prod-lot-no" type="text" required class="mt-2 w-full rounded-2xl border border-blue-100 px-4 py-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+        </label>
+
+        <label class="block">
+          <span class="text-sm font-medium text-slate-700">Process Die</span>
+          <input v-model="form.processDieCount" name="prod-process-die-count" type="number" min="1" step="1" inputmode="numeric" required class="mt-2 w-full rounded-2xl border border-blue-100 px-4 py-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+        </label>
+
+        <label class="block">
           <span class="text-sm font-medium text-slate-700">Date</span>
           <input v-model="form.date" name="prod-date" type="date" required class="mt-2 w-full rounded-2xl border border-blue-100 px-4 py-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
         </label>
@@ -108,7 +131,7 @@ async function submitForm() {
 
         <label class="block">
           <span class="text-sm font-medium text-slate-700">Picture Part</span>
-          <input name="prod-image" type="file" accept="image/*" class="mt-2 w-full rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 px-4 py-3 text-sm" @change="handleFileChange" />
+          <input name="prod-image" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" class="mt-2 w-full rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 px-4 py-3 text-sm" @change="handleFileChange" />
         </label>
 
         <p v-if="errorMessage" class="sm:col-span-2 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">

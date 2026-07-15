@@ -1,4 +1,6 @@
 <script setup>
+import WorkflowStatusBadge from './WorkflowStatusBadge.vue'
+
 defineProps({
   inspections: {
     type: Array,
@@ -12,6 +14,7 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  highlightedId: { type: [Number, String], default: null },
 })
 
 const emit = defineEmits(['toggle-select', 'view', 'edit'])
@@ -28,13 +31,6 @@ function imageUrl(path) {
   return path ? `/static/uploads/${path}` : ''
 }
 
-function statusClass(status) {
-  const normalized = String(status || '').toLowerCase()
-  if (normalized === 'pass') return 'bg-emerald-50 text-emerald-700'
-  if (normalized === 'waiting') return 'bg-amber-50 text-amber-700'
-  if (normalized === 'fail') return 'bg-red-50 text-red-700'
-  return 'bg-slate-50 text-slate-500'
-}
 </script>
 
 <template>
@@ -47,16 +43,15 @@ function statusClass(status) {
               <span class="sr-only">Select</span>
             </th>
             <th class="px-4 py-4">Date / Time</th>
-            <th class="px-4 py-4">Plan No.</th>
-            <th class="px-4 py-4">Part No.</th>
             <th class="px-4 py-4">Lot No.</th>
+            <th class="px-4 py-4">Part No.</th>
             <th class="px-4 py-4">Result (%)</th>
             <th class="px-4 py-4">Status</th>
             <th class="px-4 py-4">Action / Image</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100">
-          <tr v-for="qc in inspections" :key="qc.id" class="transition hover:bg-blue-50/50">
+          <tr v-for="qc in inspections" :id="`qc-row-${qc.id}`" :key="qc.id" class="transition duration-700 hover:bg-blue-50/50" :class="Number(highlightedId) === Number(qc.id) ? 'bg-sky-100 ring-2 ring-inset ring-sky-500' : ''">
             <td v-if="canManageQc" class="px-4 py-4">
               <input
                 type="checkbox"
@@ -66,17 +61,11 @@ function statusClass(status) {
               />
             </td>
             <td class="whitespace-nowrap px-4 py-4 font-medium text-slate-900">{{ formatDateTime(qc.time_start) }}</td>
-            <td class="px-4 py-4 font-medium text-slate-900">{{ qc.plan_no || '-' }}</td>
+            <td class="px-4 py-4 font-medium text-slate-900">{{ qc.lot_no || '-' }}</td>
             <td class="px-4 py-4 text-slate-700">{{ qc.part_no || '-' }}</td>
-            <td class="px-4 py-4 text-slate-700">{{ qc.lot_no || '-' }}</td>
             <td class="px-4 py-4 font-semibold text-slate-900">{{ qc.percent_result ? `${qc.percent_result}%` : '-' }}</td>
             <td class="px-4 py-4">
-              <span
-                class="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
-                :class="statusClass(qc.status)"
-              >
-                {{ qc.status || '-' }}
-              </span>
+              <WorkflowStatusBadge stage="QC" :status="qc.status" />
             </td>
             <td class="px-4 py-4">
               <div class="flex flex-wrap gap-2">

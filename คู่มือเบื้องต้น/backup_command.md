@@ -55,6 +55,7 @@ Get-ChildItem $backupDir
 ## 3. Export เฉพาะ DB Excel
 
 ```powershell
+
 cd "C:\Users\User\Desktop\project_for_nas_server"
 
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -66,6 +67,7 @@ New-Item -ItemType Directory -Force -Path $excelDir | Out-Null
 docker compose exec -T -e EXPORT_EXCEL_DIR="$containerExcelDir" app python scripts/export_db_to_excel.py
 
 Get-ChildItem -Recurse ".\backups\$ts"
+
 ```
 
 ไฟล์จะอยู่ที่:

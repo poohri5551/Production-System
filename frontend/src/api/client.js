@@ -71,6 +71,30 @@ export function getCurrentSession() {
   return getJson('/api/me')
 }
 
+export function getForecastMonths() {
+  return getJson('/api/forecast/months')
+}
+
+export function getForecastRows(month) {
+  return getJson(`/api/forecast?month=${encodeURIComponent(month)}`)
+}
+
+export function saveForecastLots(items) {
+  return postJson('/api/forecast/lots', { items })
+}
+
+export function getNotifications() {
+  return getJson('/api/notifications')
+}
+
+export function markNotificationRead(id) {
+  return postForm(`/api/notifications/${id}/read`, new FormData())
+}
+
+export function markAllNotificationsRead() {
+  return postForm('/api/notifications/read_all', new FormData())
+}
+
 export function getDashboardPartsStatus() {
   return getJson('/api/dashboard/parts-status')
 }
@@ -89,8 +113,11 @@ export function getProductionJobs(filters = {}) {
   return getJson(`/api/jobs${query ? `?${query}` : ''}`)
 }
 
-export function getProductionJobDetail(jobId) {
-  return getJson(`/api/jobs/${jobId}`)
+export function getProductionJobDetail(jobId, processDieNo = null) {
+  const params = new URLSearchParams()
+  if (processDieNo) params.set('process_die_no', processDieNo)
+  const query = params.toString()
+  return getJson(`/api/jobs/${jobId}${query ? `?${query}` : ''}`)
 }
 
 export function createProductionJob(formData) {
@@ -129,18 +156,46 @@ export function saveQCInspection(formData, qcId = '') {
   return postForm(qcId ? `/api/qc/${qcId}/update` : '/api/qc', formData)
 }
 
+export function stampQCInspectionTimestamp({ qcId = '', planId = '', field }) {
+  const url = qcId
+    ? `/api/qc/${qcId}/timestamps/${field}/stamp`
+    : `/api/qc/plan/${planId}/timestamps/${field}/stamp`
+  return postForm(url, new FormData())
+}
+
 export function getQCPlanOptions() {
   return getJson('/api/qc/plans')
 }
 
-export function getQCPlanDetail(planNo) {
-  return getJson(`/api/qc/plan?plan_no=${encodeURIComponent(planNo)}`)
+export function getQCPlanDetail(lotNo) {
+  return getJson(`/api/qc/plan?lot_no=${encodeURIComponent(lotNo)}`)
 }
 
-export function sendSettingDieToQCLine(planNo) {
+export function sendSettingDieToQCLine(lotNo, planId = '') {
   const formData = new FormData()
-  formData.append('plan_no', planNo)
+  formData.append('lot_no', lotNo)
+  if (planId) formData.append('plan_id', planId)
   return postForm('/api/qc/from_setting_die', formData)
+}
+
+export function reopenSettingDieCorrection(planId, reason) {
+  return postJson('/api/setting_die/corrections/reopen', { plan_id: planId, reason })
+}
+
+export function requestSettingDieCorrection(planId, reason) {
+  return postJson('/api/setting_die/corrections/request', { plan_id: planId, reason })
+}
+
+export function approveSettingDieCorrection(correctionId) {
+  return postJson(`/api/setting_die/corrections/${correctionId}/approve`, {})
+}
+
+export function rejectSettingDieCorrection(correctionId, reason) {
+  return postJson(`/api/setting_die/corrections/${correctionId}/reject`, { reason })
+}
+
+export function finishSettingDieCorrection(correctionId) {
+  return postJson(`/api/setting_die/corrections/${correctionId}/finish`, {})
 }
 
 export function bulkDeleteQCInspections(ids, adminPassword) {
@@ -152,9 +207,9 @@ export function bulkDeleteQCInspections(ids, adminPassword) {
 
 export function createProductionStartFromQC(qc) {
   const formData = new FormData()
-  formData.append('plan_no', qc.plan_no || '')
   formData.append('lot_no', qc.lot_no || '')
   formData.append('part_no', qc.part_no || '')
+  if (qc.plan_id) formData.append('plan_id', qc.plan_id)
   return postForm('/api/production_start/from_qc', formData)
 }
 
@@ -174,12 +229,16 @@ export function getProductionStartPlanOptions() {
   return getJson('/api/production_start/plans')
 }
 
-export function getProductionStartPlanDetail(planNo) {
-  return getJson(`/api/production_start/plan?plan_no=${encodeURIComponent(planNo)}`)
+export function getProductionStartPlanDetail(lotNo) {
+  return getJson(`/api/production_start/plan?lot_no=${encodeURIComponent(lotNo)}`)
 }
 
 export function confirmProductionStart(startId) {
   return postForm(`/api/production_start/${startId}/confirm`, new FormData())
+}
+
+export function stampProductionStartTime(startId) {
+  return postForm(`/api/production_start/${startId}/timestamps/time_start/stamp`, new FormData())
 }
 
 export function bulkDeleteProductionStarts(ids, adminPassword) {
@@ -201,12 +260,16 @@ export function getProductionFinishPlanOptions() {
   return getJson('/api/production_finish/plans')
 }
 
-export function getProductionFinishPlanDetail(planNo) {
-  return getJson(`/api/production_finish/plan?plan_no=${encodeURIComponent(planNo)}`)
+export function getProductionFinishPlanDetail(lotNo) {
+  return getJson(`/api/production_finish/plan?lot_no=${encodeURIComponent(lotNo)}`)
 }
 
 export function confirmProductionFinish(finishId) {
   return postForm(`/api/production_finish/${finishId}/confirm`, new FormData())
+}
+
+export function stampProductionFinishTimestamp(finishId, field) {
+  return postForm(`/api/production_finish/${finishId}/timestamps/${field}/stamp`, new FormData())
 }
 
 export function bulkDeleteProductionFinishes(ids, adminPassword) {

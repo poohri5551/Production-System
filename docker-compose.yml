@@ -8,10 +8,29 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - uploads_data:/app/static/uploads
       - ./backups:/app/backups
+    restart: unless-stopped
+
+  forecast-sync:
+    profiles: ["forecast-sync"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "scripts/forecast_sync_worker.py"]
+    env_file:
+      - .env
+    environment:
+      FORECAST_SOURCE_PATH: ${FORECAST_SOURCE_PATH:-/forecast_source/1.FORCASE CENTOR.xlsx}
+      FORECAST_SYNC_INTERVAL_SECONDS: ${FORECAST_SYNC_INTERVAL_SECONDS:-900}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./forecast_source:/forecast_source:ro
     restart: unless-stopped
 
   db:
@@ -31,6 +50,11 @@ services:
       MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
 volumes:

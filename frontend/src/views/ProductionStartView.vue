@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   bulkDeleteProductionStarts,
   confirmProductionStart,
@@ -8,22 +8,30 @@ import {
 } from '../api/client'
 import ProductionStartFormModal from '../components/ProductionStartFormModal.vue'
 import ProductionStartTable from '../components/ProductionStartTable.vue'
+import WorkflowConfirmationDialog from '../components/WorkflowConfirmationDialog.vue'
 import { can } from '../permissions'
+import { findWorkflowTarget } from '../constants/workflowStatus'
 
 const props = defineProps({
   permissions: {
     type: Array,
     default: () => [],
   },
+  focusTarget: { type: Object, default: null },
 })
+
+const emit = defineEmits(['focus-result'])
 
 const starts = ref([])
 const selectedIds = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
 const noticeMessage = ref('')
+const highlightedStartId = ref(null)
 const showFormModal = ref(false)
 const editStart = ref(null)
+const confirmTarget = ref(null)
+const isConfirming = ref(false)
 const bulkDeleteState = reactive({
   isOpen: false,
   adminPassword: '',
@@ -33,6 +41,7 @@ const bulkDeleteState = reactive({
 
 const canManageProductionStart = computed(() => can(props.permissions, 'production_start.manage'))
 const hasSelectedStarts = computed(() => canManageProductionStart.value && selectedIds.value.length > 0)
+let highlightTimer = null
 
 onMounted(() => {
   loadProductionStarts()
@@ -47,6 +56,8 @@ async function loadProductionStarts() {
     if (Array.isArray(data)) {
       starts.value = data
       selectedIds.value = selectedIds.value.filter((id) => data.some((item) => item.id === id))
+      isLoading.value = false
+      await applyFocusTarget()
       return
     }
     errorMessage.value = data.message || 'Cannot load Production Start records'
@@ -56,6 +67,29 @@ async function loadProductionStarts() {
     isLoading.value = false
   }
 }
+
+async function applyFocusTarget() {
+  if (!props.focusTarget) return
+  const record = findWorkflowTarget(starts.value, props.focusTarget)
+  if (!record) {
+    emit('focus-result', { found: false, lotNo: props.focusTarget.lotNo })
+    return
+  }
+  highlightedStartId.value = record.id
+  await nextTick()
+  document.getElementById(`production-start-row-${record.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  emit('focus-result', { found: true, lotNo: record.lot_no })
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+  highlightTimer = window.setTimeout(() => { highlightedStartId.value = null }, 5000)
+}
+
+watch(() => props.focusTarget?.token, () => {
+  if (!isLoading.value && props.focusTarget) applyFocusTarget()
+})
+
+onUnmounted(() => {
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+})
 
 function toggleSelect(id) {
   selectedIds.value = selectedIds.value.includes(id)
@@ -74,10 +108,20 @@ async function openEditModal(startId) {
   noticeMessage.value = ''
   errorMessage.value = ''
 
+  const current = starts.value.find((item) => Number(item.id) === Number(startId))
+  if (!current || current.confirm_status !== 'confirmed') {
+    errorMessage.value = 'Confirm Production Start first'
+    return
+  }
+
   try {
     const data = await getProductionStartDetail(startId)
     if (!data.success) {
       errorMessage.value = data.message || 'Cannot load Production Start'
+      return
+    }
+    if (data.production_start?.confirm_status !== 'confirmed') {
+      errorMessage.value = 'Confirm Production Start first'
       return
     }
     editStart.value = data.production_start
@@ -99,21 +143,39 @@ function handleSaved() {
   loadProductionStarts()
 }
 
-async function confirmStart(startId) {
-  if (!canManageProductionStart.value) return
+function requestConfirmStart(start) {
+  if (!canManageProductionStart.value || isConfirming.value || start?.confirm_status === 'confirmed') return
+  noticeMessage.value = ''
+  errorMessage.value = ''
+  confirmTarget.value = start
+}
+
+function cancelConfirmStart() {
+  if (isConfirming.value) return
+  confirmTarget.value = null
+}
+
+async function confirmStart() {
+  if (!canManageProductionStart.value || isConfirming.value || !confirmTarget.value) return
+  isConfirming.value = true
   noticeMessage.value = ''
   errorMessage.value = ''
 
   try {
-    const data = await confirmProductionStart(startId)
+    const data = await confirmProductionStart(confirmTarget.value.id)
     if (!data.success) {
       errorMessage.value = data.message || 'Cannot confirm Production Start'
       return
     }
-    noticeMessage.value = 'Production Start confirmed successfully.'
+    noticeMessage.value = data.already_confirmed
+      ? 'Production Start was already confirmed.'
+      : 'Production Start confirmed successfully.'
+    confirmTarget.value = null
     await loadProductionStarts()
   } catch (error) {
     errorMessage.value = error.message || 'Cannot connect to backend'
+  } finally {
+    isConfirming.value = false
   }
 }
 
@@ -204,12 +266,29 @@ async function submitBulkDelete() {
       :starts="starts"
       :selected-ids="selectedIds"
       :can-manage-production-start="canManageProductionStart"
+      :highlighted-id="highlightedStartId"
       @toggle-select="toggleSelect"
-      @confirm="confirmStart"
+      @confirm="requestConfirmStart"
       @edit="openEditModal"
     />
 
-    <ProductionStartFormModal v-if="showFormModal" :start="editStart" @close="closeFormModal" @saved="handleSaved" />
+    <ProductionStartFormModal v-if="showFormModal" :start="editStart" @close="closeFormModal" @saved="handleSaved" @changed="loadProductionStarts" />
+
+    <WorkflowConfirmationDialog
+      v-if="confirmTarget"
+      title="Confirm Production Start"
+      message="Confirm this Production Start record? Editing will become available after confirmation."
+      :details="[
+        { label: 'Lot No.', value: confirmTarget.lot_no },
+        { label: 'Part No.', value: confirmTarget.part_no },
+        { label: 'Die No.', value: confirmTarget.die_no },
+      ]"
+      confirm-label="Confirm"
+      busy-label="Confirming..."
+      :busy="isConfirming"
+      @cancel="cancelConfirmStart"
+      @confirm="confirmStart"
+    />
 
     <div v-if="bulkDeleteState.isOpen" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/40 px-4 py-8 backdrop-blur-sm">
       <section class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-blue-100 bg-white p-6 shadow-2xl">

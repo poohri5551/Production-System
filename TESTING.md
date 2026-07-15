@@ -18,6 +18,16 @@ C:\Users\User\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\py
 npm.cmd --prefix .\frontend run build
 ```
 
+## Unit And Contract Tests
+
+```powershell
+python -m unittest discover -s tests -v
+npm.cmd --prefix .\frontend run test:forecast
+npm.cmd --prefix .\frontend run test:workflow
+```
+
+The workflow contract suite verifies canonical `lot_no`, one read-only Setting Die Lot No., migration conflict safety, preserved `plan_id`, and absence of the obsolete current API/UI identifier.
+
 ## Phase 8 Flask/Vue Production Smoke
 
 Run this after `npm.cmd --prefix .\frontend run build`:

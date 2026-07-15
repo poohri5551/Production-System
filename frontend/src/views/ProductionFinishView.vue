@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   bulkDeleteProductionFinishes,
   confirmProductionFinish,
@@ -8,20 +8,26 @@ import {
 import ProductionFinishFormModal from '../components/ProductionFinishFormModal.vue'
 import ProductionFinishTable from '../components/ProductionFinishTable.vue'
 import { can } from '../permissions'
+import { findWorkflowTarget } from '../constants/workflowStatus'
 
 const props = defineProps({
   permissions: {
     type: Array,
     default: () => [],
   },
+  focusTarget: { type: Object, default: null },
 })
+
+const emit = defineEmits(['focus-result'])
 
 const finishes = ref([])
 const selectedIds = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
 const noticeMessage = ref('')
+const highlightedFinishId = ref(null)
 const showFormModal = ref(false)
+const selectedFinish = ref(null)
 const bulkDeleteState = reactive({
   isOpen: false,
   adminPassword: '',
@@ -31,6 +37,7 @@ const bulkDeleteState = reactive({
 
 const canManageProductionFinish = computed(() => can(props.permissions, 'production_finish.manage'))
 const hasSelectedFinishes = computed(() => canManageProductionFinish.value && selectedIds.value.length > 0)
+let highlightTimer = null
 
 onMounted(() => {
   loadProductionFinishes()
@@ -45,6 +52,8 @@ async function loadProductionFinishes() {
     if (Array.isArray(data)) {
       finishes.value = data
       selectedIds.value = selectedIds.value.filter((id) => data.some((item) => item.id === id))
+      isLoading.value = false
+      await applyFocusTarget()
       return
     }
     errorMessage.value = data.message || 'Cannot load Production Finish records'
@@ -55,6 +64,29 @@ async function loadProductionFinishes() {
   }
 }
 
+async function applyFocusTarget() {
+  if (!props.focusTarget) return
+  const record = findWorkflowTarget(finishes.value, props.focusTarget)
+  if (!record) {
+    emit('focus-result', { found: false, lotNo: props.focusTarget.lotNo })
+    return
+  }
+  highlightedFinishId.value = record.id
+  await nextTick()
+  document.getElementById(`production-finish-row-${record.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  emit('focus-result', { found: true, lotNo: record.lot_no })
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+  highlightTimer = window.setTimeout(() => { highlightedFinishId.value = null }, 5000)
+}
+
+watch(() => props.focusTarget?.token, () => {
+  if (!isLoading.value && props.focusTarget) applyFocusTarget()
+})
+
+onUnmounted(() => {
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+})
+
 function toggleSelect(id) {
   selectedIds.value = selectedIds.value.includes(id)
     ? selectedIds.value.filter((selectedId) => selectedId !== id)
@@ -63,11 +95,19 @@ function toggleSelect(id) {
 
 function openCreateModal() {
   if (!canManageProductionFinish.value) return
+  selectedFinish.value = null
+  showFormModal.value = true
+}
+
+function openTimestampModal(finish) {
+  if (!canManageProductionFinish.value || !finish) return
+  selectedFinish.value = finish
   showFormModal.value = true
 }
 
 function closeFormModal() {
   showFormModal.value = false
+  selectedFinish.value = null
 }
 
 function handleSaved() {
@@ -181,11 +221,13 @@ async function submitBulkDelete() {
       :finishes="finishes"
       :selected-ids="selectedIds"
       :can-manage-production-finish="canManageProductionFinish"
+      :highlighted-id="highlightedFinishId"
       @toggle-select="toggleSelect"
       @confirm="confirmFinish"
+      @timestamps="openTimestampModal"
     />
 
-    <ProductionFinishFormModal v-if="showFormModal" @close="closeFormModal" @saved="handleSaved" />
+    <ProductionFinishFormModal v-if="showFormModal" :finish="selectedFinish" @close="closeFormModal" @saved="handleSaved" @changed="loadProductionFinishes" />
 
     <div v-if="bulkDeleteState.isOpen" class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-slate-950/40 px-4 py-8 backdrop-blur-sm">
       <section class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-blue-100 bg-white p-6 shadow-2xl">

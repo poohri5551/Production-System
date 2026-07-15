@@ -25,3 +25,6 @@ npm-debug.log*
 inventory_db*.sql
 backups/
 export_excel/
+/1.FORCASE CENTOR.xlsx
+forcase/
+forecast_source/

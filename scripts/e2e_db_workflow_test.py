@@ -231,16 +231,15 @@ def require_api_success(reporter, client, endpoint, data=None, method="POST"):
     return payload
 
 
-def list_contains_plan(rows, plan_no):
-    return any(row.get("plan_no") == plan_no for row in rows)
+def list_contains_plan(rows, lot_no):
+    return any(row.get("lot_no") == lot_no for row in rows)
 
 
 def run_workflow(reporter):
     stamp = int(time.time())
     part_no = f"E2E-PART-{stamp}"
-    plan_no = f"E2E-PLAN-{stamp}"
     lot_no = f"E2E-LOT-{stamp}"
-    reporter.remember("plan_no", plan_no)
+    reporter.remember("lot_no", lot_no)
 
     client = app.test_client()
 
@@ -260,6 +259,8 @@ def run_workflow(reporter):
     )
 
     production_data = {
+        "prod-lot-no": lot_no,
+        "prod-process-die-count": "4",
         "prod-date": "2026-06-17",
         "prod-zone": "A",
         "prod-part-no": part_no,
@@ -279,6 +280,15 @@ def run_workflow(reporter):
         actual=production_plan,
     )
     production_plan_id = reporter.remember("production_plan_id", production_plan["id"])
+    reporter.require(
+        production_plan
+        and production_plan.get("lot_no") == lot_no
+        and int(production_plan.get("process_die_count") or 0) == 4,
+        "Production Plan stores lot_no and process_die_count",
+        sql="SELECT lot_no, process_die_count FROM production_plans WHERE part_no=%s",
+        expected={"lot_no": lot_no, "process_die_count": 4},
+        actual=production_plan,
+    )
 
     part = fetch_one("SELECT * FROM parts WHERE id = %s", (production_plan["part_id"],))
     reporter.require(
@@ -293,51 +303,188 @@ def run_workflow(reporter):
     setting_data = {
         "plan_id": str(production_plan_id),
         "set-part-no": part_no,
-        "set-lot-no": lot_no,
         "set-die-no": "E2E-DIE-01",
-        "set-plan-no": plan_no,
-        "set-process-die": "E2E-PROCESS",
+        "set-lot-no": lot_no,
         "set-dh": "10",
         "set-spm": "25",
         "set-time-start": "2026-06-17T08:00",
-        "set-time-end": "2026-06-17T08:30",
         "set-material": "E2E-MATERIAL",
-        "custom-time-1": "2026-06-17T08:31",
-        "custom-time-2": "2026-06-17T08:45",
-        "custom-time-3": "2026-06-17T08:46",
-        "custom-time-4": "2026-06-17T09:00",
         "set-technician": "E2E-TECH",
     }
-    require_api_success(reporter, client, "/api/setting_die", setting_data)
-    setting = fetch_one(
-        "SELECT * FROM setting_dies WHERE plan_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
-        (plan_no,),
+    missing_start_data = {
+        **setting_data,
+        "process_die_no": "1",
+    }
+    missing_start_data.pop("set-time-start")
+    missing_start_response, missing_start_payload = api_post(client, "/api/setting_die", missing_start_data)
+    reporter.require(
+        missing_start_response.status_code == 400
+        and missing_start_payload.get("success") is False
+        and missing_start_payload.get("message") == "กรุณา Stamp เวลา Time Start Setting Die ก่อนบันทึก",
+        "Setting Die rejects creating a process without Time Start Setting Die",
+        endpoint="/api/setting_die",
+        response=missing_start_payload,
+        expected={
+            "status_code": 400,
+            "message": "กรุณา Stamp เวลา Time Start Setting Die ก่อนบันทึก",
+        },
+        actual={
+            "status_code": missing_start_response.status_code,
+            "message": missing_start_payload.get("message"),
+        },
     )
+    for process_no in range(1, 4):
+        process_setting_data = {
+            **setting_data,
+            "process_die_no": str(process_no),
+        }
+        require_api_success(reporter, client, "/api/setting_die", process_setting_data)
+        if process_no == 1:
+            invalid_adjust_response, invalid_adjust_payload = api_post(client, "/api/setting_die", {
+                **setting_data,
+                "process_die_no": "1",
+                "custom-time-3": "2026-06-17T08:46",
+                "custom-time-4": "2026-06-17T09:00",
+            })
+            reporter.require(
+                invalid_adjust_response.status_code == 400
+                and invalid_adjust_payload.get("success") is False
+                and invalid_adjust_payload.get("message") == "Adjust Accuracy Part timestamps are allowed only on the last process",
+                "Setting Die rejects Adjust Accuracy timestamps on a non-last process",
+                endpoint="/api/setting_die",
+                response=invalid_adjust_payload,
+                expected={
+                    "status_code": 400,
+                    "message": "Adjust Accuracy Part timestamps are allowed only on the last process",
+                },
+                actual={
+                    "status_code": invalid_adjust_response.status_code,
+                    "message": invalid_adjust_payload.get("message"),
+                },
+            )
+        _, qc_plans_incomplete = api_get(client, "/api/qc/plans")
+        reporter.require(
+            isinstance(qc_plans_incomplete, list) and not list_contains_plan(qc_plans_incomplete, lot_no),
+            f"QC plans exclude plan before all processes are saved ({process_no}/4)",
+            endpoint="/api/qc/plans",
+            response=qc_plans_incomplete,
+            expected=f"does not contain {lot_no}",
+            actual=[row.get("lot_no") for row in qc_plans_incomplete] if isinstance(qc_plans_incomplete, list) else qc_plans_incomplete,
+        )
+
+    process_four_data = {
+        **setting_data,
+        "process_die_no": "4",
+        "custom-time-3": "2026-06-17T08:46",
+        "custom-time-4": "2026-06-17T09:00",
+    }
+    require_api_success(reporter, client, "/api/setting_die", process_four_data)
+    settings = fetch_all(
+        "SELECT * FROM setting_dies WHERE lot_no = %s AND deleted_at IS NULL ORDER BY process_die_no ASC",
+        (lot_no,),
+    )
+    reporter.require(
+        len(settings) == 4 and {int(row.get("process_die_no") or 0) for row in settings} == {1, 2, 3, 4},
+        "Setting Die created one row per process",
+        sql="SELECT * FROM setting_dies WHERE lot_no=%s",
+        expected="process_die_no 1,2,3,4",
+        actual=settings,
+    )
+    setting = settings[0]
     reporter.require(
         setting
         and setting.get("plan_id") == production_plan_id
         and setting.get("part_id") == production_plan["part_id"]
         and setting.get("part_no") == part_no,
         "Setting Die linked to plan_id and part_id",
-        sql="SELECT * FROM setting_dies WHERE plan_no=%s",
+        sql="SELECT * FROM setting_dies WHERE lot_no=%s",
         expected={"plan_id": production_plan_id, "part_id": production_plan["part_id"], "part_no": part_no},
         actual=setting,
     )
     reporter.remember("setting_die_id", setting["id"])
+    process_one = next(row for row in settings if int(row.get("process_die_no") or 0) == 1)
+    process_four = next(row for row in settings if int(row.get("process_die_no") or 0) == 4)
+    reporter.require(
+        process_one.get("process_die") in (None, "")
+        and process_one.get("time_start") is not None
+        and process_one.get("time_end") is None
+        and process_one.get("custom_time_1") is None
+        and process_one.get("custom_time_2") is None
+        and process_one.get("custom_time_3") is None
+        and process_one.get("custom_time_4") is None
+        and process_four.get("custom_time_3") is not None
+        and process_four.get("custom_time_4") is not None,
+        "Setting Die stores Process Die as optional and requires only Time Start for initial save",
+        sql="SELECT process_die, time_start, time_end, custom_time_1, custom_time_2, custom_time_3, custom_time_4 FROM setting_dies WHERE lot_no=%s",
+        expected={
+            "process_1": {
+                "process_die": None,
+                "time_start": "set",
+                "time_end": None,
+                "custom_time_1": None,
+                "custom_time_2": None,
+                "custom_time_3": None,
+                "custom_time_4": None,
+            },
+            "process_4": {"custom_time_3": "set", "custom_time_4": "set"},
+        },
+        actual={"process_1": process_one, "process_4": process_four},
+    )
+
+    process_two_before = next(row for row in settings if int(row.get("process_die_no") or 0) == 2)
+    duplicate_process_two_data = {
+        **setting_data,
+        "process_die_no": "2",
+        "set-dh": "99",
+        "set-time-end": "2026-06-17T08:30",
+    }
+    require_api_success(reporter, client, "/api/setting_die", duplicate_process_two_data)
+    process_two_after = fetch_one(
+        "SELECT * FROM setting_dies WHERE lot_no = %s AND process_die_no = 2 AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
+        (lot_no,),
+    )
+    settings_after_duplicate = fetch_all(
+        "SELECT * FROM setting_dies WHERE lot_no = %s AND deleted_at IS NULL",
+        (lot_no,),
+    )
+    reporter.require(
+        process_two_after
+        and process_two_after.get("id") == process_two_before.get("id")
+        and str(process_two_after.get("dh")) == "99"
+        and process_two_after.get("time_end") is not None
+        and len(settings_after_duplicate) == 4,
+        "Saving same process updates existing Setting Die row and can add Time End later",
+        sql="SELECT * FROM setting_dies WHERE lot_no=%s AND process_die_no=2",
+        expected={"same_id": process_two_before.get("id"), "row_count": 4, "dh": "99", "time_end": "set"},
+        actual={"process_two_after": process_two_after, "row_count": len(settings_after_duplicate)},
+    )
+
+    locked_timestamp_data = {
+        **duplicate_process_two_data,
+        "set-time-start": "2026-06-17T07:59",
+    }
+    locked_response, locked_payload = api_post(client, "/api/setting_die", locked_timestamp_data)
+    reporter.require(
+        locked_response.status_code == 400 and locked_payload.get("success") is False,
+        "Setting Die rejects changing an already stamped timestamp",
+        endpoint="/api/setting_die",
+        response=locked_payload,
+        expected={"status_code": 400, "success": False},
+        actual={"status_code": locked_response.status_code, "success": locked_payload.get("success")},
+    )
 
     _, qc_plans_before = api_get(client, "/api/qc/plans")
     reporter.require(
-        isinstance(qc_plans_before, list) and list_contains_plan(qc_plans_before, plan_no),
-        "QC plans include plan before finish",
+        isinstance(qc_plans_before, list) and list_contains_plan(qc_plans_before, lot_no),
+        "QC plans include plan after all Setting Die processes are saved",
         endpoint="/api/qc/plans",
         response=qc_plans_before,
-        expected=f"contains {plan_no}",
-        actual=[row.get("plan_no") for row in qc_plans_before] if isinstance(qc_plans_before, list) else qc_plans_before,
+        expected=f"contains {lot_no}",
+        actual=[row.get("lot_no") for row in qc_plans_before] if isinstance(qc_plans_before, list) else qc_plans_before,
     )
 
     qc_data = {
         "qc-lot-no": lot_no,
-        "qc-plan-no": plan_no,
         "qc-part-no": part_no,
         "qc-time-start": "2026-06-17T09:05",
         "qc-time-end": "2026-06-17T09:10",
@@ -350,23 +497,23 @@ def run_workflow(reporter):
     }
     require_api_success(reporter, client, "/api/qc", qc_data)
     qc = fetch_one(
-        "SELECT * FROM qc_inspections WHERE plan_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
-        (plan_no,),
+        "SELECT * FROM qc_inspections WHERE lot_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
+        (lot_no,),
     )
     reporter.require(
         qc and qc.get("plan_id") == production_plan_id and qc.get("part_id") == production_plan["part_id"],
         "QC created with plan_id and part_id",
-        sql="SELECT * FROM qc_inspections WHERE plan_no=%s",
+        sql="SELECT * FROM qc_inspections WHERE lot_no=%s",
         expected={"plan_id": production_plan_id, "part_id": production_plan["part_id"]},
         actual=qc,
     )
     qc_id = reporter.remember("qc_id", qc["id"])
 
-    notify_data = {"plan_no": plan_no, "lot_no": lot_no, "part_no": part_no}
+    notify_data = {"lot_no": lot_no, "part_no": part_no}
     require_api_success(reporter, client, "/api/production_start/from_qc", notify_data)
     production_start = fetch_one(
-        "SELECT * FROM production_starts WHERE plan_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
-        (plan_no,),
+        "SELECT * FROM production_starts WHERE lot_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
+        (lot_no,),
     )
     reporter.require(
         production_start
@@ -374,7 +521,7 @@ def run_workflow(reporter):
         and production_start.get("part_id") == production_plan["part_id"]
         and production_start.get("confirm_status") == "waiting",
         "Notify Operator creates waiting Production Start with plan_id and part_id",
-        sql="SELECT * FROM production_starts WHERE plan_no=%s",
+        sql="SELECT * FROM production_starts WHERE lot_no=%s",
         expected={"plan_id": production_plan_id, "part_id": production_plan["part_id"], "confirm_status": "waiting"},
         actual=production_start,
     )
@@ -382,26 +529,25 @@ def run_workflow(reporter):
 
     _, finish_plans_waiting = api_get(client, "/api/production_finish/plans")
     reporter.require(
-        isinstance(finish_plans_waiting, list) and not list_contains_plan(finish_plans_waiting, plan_no),
+        isinstance(finish_plans_waiting, list) and not list_contains_plan(finish_plans_waiting, lot_no),
         "Finish dropdown excludes waiting Production Start",
         endpoint="/api/production_finish/plans",
         response=finish_plans_waiting,
-        expected=f"does not contain {plan_no}",
-        actual=[row.get("plan_no") for row in finish_plans_waiting] if isinstance(finish_plans_waiting, list) else finish_plans_waiting,
+        expected=f"does not contain {lot_no}",
+        actual=[row.get("lot_no") for row in finish_plans_waiting] if isinstance(finish_plans_waiting, list) else finish_plans_waiting,
     )
 
     duplicate_start_plans = api_get(client, "/api/production_start/plans")[1]
     reporter.require(
-        isinstance(duplicate_start_plans, list) and not list_contains_plan(duplicate_start_plans, plan_no),
+        isinstance(duplicate_start_plans, list) and not list_contains_plan(duplicate_start_plans, lot_no),
         "Production Start dropdown excludes active started plan",
         endpoint="/api/production_start/plans",
         response=duplicate_start_plans,
-        expected=f"does not contain {plan_no}",
-        actual=[row.get("plan_no") for row in duplicate_start_plans] if isinstance(duplicate_start_plans, list) else duplicate_start_plans,
+        expected=f"does not contain {lot_no}",
+        actual=[row.get("lot_no") for row in duplicate_start_plans] if isinstance(duplicate_start_plans, list) else duplicate_start_plans,
     )
 
     waiting_finish_data = {
-        "finish-plan-no": plan_no,
         "finish-lot-no": lot_no,
         "finish-actual-qty": "97",
         "finish-note": "Should be rejected while waiting",
@@ -430,16 +576,15 @@ def run_workflow(reporter):
 
     _, finish_plans_confirmed = api_get(client, "/api/production_finish/plans")
     reporter.require(
-        isinstance(finish_plans_confirmed, list) and list_contains_plan(finish_plans_confirmed, plan_no),
+        isinstance(finish_plans_confirmed, list) and list_contains_plan(finish_plans_confirmed, lot_no),
         "Finish dropdown includes confirmed Production Start",
         endpoint="/api/production_finish/plans",
         response=finish_plans_confirmed,
-        expected=f"contains {plan_no}",
-        actual=[row.get("plan_no") for row in finish_plans_confirmed] if isinstance(finish_plans_confirmed, list) else finish_plans_confirmed,
+        expected=f"contains {lot_no}",
+        actual=[row.get("lot_no") for row in finish_plans_confirmed] if isinstance(finish_plans_confirmed, list) else finish_plans_confirmed,
     )
 
     finish_data = {
-        "finish-plan-no": plan_no,
         "finish-lot-no": lot_no,
         "finish-actual-qty": "97",
         "finish-note": "E2E completed",
@@ -448,8 +593,8 @@ def run_workflow(reporter):
     }
     require_api_success(reporter, client, "/api/production_finish", finish_data)
     finish = fetch_one(
-        "SELECT * FROM production_finishes WHERE plan_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
-        (plan_no,),
+        "SELECT * FROM production_finishes WHERE lot_no = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
+        (lot_no,),
     )
     reporter.require(
         finish
@@ -457,7 +602,7 @@ def run_workflow(reporter):
         and finish.get("part_id") == production_plan["part_id"]
         and finish.get("part_no") == part_no,
         "Production Finish created with plan_id and part_id",
-        sql="SELECT * FROM production_finishes WHERE plan_no=%s",
+        sql="SELECT * FROM production_finishes WHERE lot_no=%s",
         expected={"plan_id": production_plan_id, "part_id": production_plan["part_id"], "part_no": part_no},
         actual=finish,
     )
@@ -490,12 +635,12 @@ def run_workflow(reporter):
 
     _, qc_plans_after = api_get(client, "/api/qc/plans")
     reporter.require(
-        isinstance(qc_plans_after, list) and not list_contains_plan(qc_plans_after, plan_no),
+        isinstance(qc_plans_after, list) and not list_contains_plan(qc_plans_after, lot_no),
         "QC plans exclude plan after Confirm Finish",
         endpoint="/api/qc/plans",
         response=qc_plans_after,
-        expected=f"does not contain {plan_no}",
-        actual=[row.get("plan_no") for row in qc_plans_after] if isinstance(qc_plans_after, list) else qc_plans_after,
+        expected=f"does not contain {lot_no}",
+        actual=[row.get("lot_no") for row in qc_plans_after] if isinstance(qc_plans_after, list) else qc_plans_after,
     )
 
     delete_response, delete_payload = api_post(
