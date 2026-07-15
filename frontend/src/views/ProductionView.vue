@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   acceptProductionJob,
   bulkDeleteProductionJobs,
@@ -10,13 +10,19 @@ import ProductionFormModal from '../components/ProductionFormModal.vue'
 import ProductionTable from '../components/ProductionTable.vue'
 import SettingDieModal from '../components/SettingDieModal.vue'
 import { can } from '../permissions'
+import { findWorkflowTarget } from '../constants/workflowStatus'
+import { settingDieEligibility } from '../constants/settingDieSequence'
 
 const props = defineProps({
+  role: { type: String, default: '' },
   permissions: {
     type: Array,
     default: () => [],
   },
+  focusTarget: { type: Object, default: null },
 })
+
+const emit = defineEmits(['focus-result'])
 
 const filters = reactive({
   zone: '',
@@ -29,9 +35,10 @@ const selectedIds = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
 const noticeMessage = ref('')
+const highlightedJobId = ref(null)
 const showCreateModal = ref(false)
 const detailState = reactive({ isOpen: false, isLoading: false, error: '', job: null, setting: null })
-const settingModalState = reactive({ isOpen: false, isLoading: false, error: '', job: null, setting: null })
+const settingModalState = reactive({ isOpen: false, isLoading: false, error: '', job: null, setting: null, processDieNo: 1 })
 const bulkDeleteState = reactive({
   isOpen: false,
   adminPassword: '',
@@ -39,10 +46,13 @@ const bulkDeleteState = reactive({
   error: '',
 })
 
-const canManageProduction = computed(() => can(props.permissions, 'production.manage'))
+const canCreateProduction = computed(() => can(props.permissions, 'production.create'))
+const canAcceptProduction = computed(() => can(props.permissions, 'production.accept'))
+const canDeleteProduction = computed(() => can(props.permissions, 'production.delete'))
 const canManageSettingDie = computed(() => can(props.permissions, 'setting_die.manage'))
-const canSendSettingDieToQC = computed(() => can(props.permissions, 'qc.manage'))
-const hasSelectedJobs = computed(() => canManageProduction.value && selectedIds.value.length > 0)
+const canSendSettingDieToQC = computed(() => can(props.permissions, 'setting_die.send_to_qc'))
+const hasSelectedJobs = computed(() => canDeleteProduction.value && selectedIds.value.length > 0)
+let highlightTimer = null
 
 onMounted(() => {
   loadJobs()
@@ -57,6 +67,8 @@ async function loadJobs() {
     if (Array.isArray(data)) {
       jobs.value = data
       selectedIds.value = selectedIds.value.filter((id) => data.some((job) => job.id === id))
+      isLoading.value = false
+      await applyFocusTarget()
       return
     }
     errorMessage.value = data.message || 'Cannot load production jobs'
@@ -66,6 +78,29 @@ async function loadJobs() {
     isLoading.value = false
   }
 }
+
+async function applyFocusTarget() {
+  if (!props.focusTarget) return
+  const record = findWorkflowTarget(jobs.value, props.focusTarget, { useIdAsPlanId: true })
+  if (!record) {
+    emit('focus-result', { found: false, lotNo: props.focusTarget.lotNo })
+    return
+  }
+  highlightedJobId.value = record.id
+  await nextTick()
+  document.getElementById(`production-row-${record.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  emit('focus-result', { found: true, lotNo: record.lot_no })
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+  highlightTimer = window.setTimeout(() => { highlightedJobId.value = null }, 5000)
+}
+
+watch(() => props.focusTarget?.token, () => {
+  if (!isLoading.value && props.focusTarget) applyFocusTarget()
+})
+
+onUnmounted(() => {
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+})
 
 function clearFilters() {
   filters.zone = ''
@@ -91,7 +126,7 @@ function handleCreated() {
 }
 
 async function acceptJob(jobId) {
-  if (!canManageProduction.value) return
+  if (!canAcceptProduction.value) return
   noticeMessage.value = ''
   errorMessage.value = ''
 
@@ -134,17 +169,25 @@ function closeDetail() {
   detailState.isOpen = false
 }
 
-async function openSettingDie(job) {
+async function openSettingDie(job, processDieNo = 1) {
   if (!canManageSettingDie.value) return
+  const currentJob = jobs.value.find((item) => Number(item.id) === Number(job?.id)) || job
+  const eligibility = settingDieEligibility(currentJob, processDieNo)
+  if (!eligibility.allowed) {
+    errorMessage.value = ''
+    noticeMessage.value = eligibility.message
+    return
+  }
   noticeMessage.value = ''
   settingModalState.isOpen = true
   settingModalState.isLoading = true
   settingModalState.error = ''
   settingModalState.job = job
   settingModalState.setting = null
+  settingModalState.processDieNo = processDieNo
 
   try {
-    const data = await getProductionJobDetail(job.id)
+    const data = await getProductionJobDetail(job.id, processDieNo)
     if (!data.success) {
       settingModalState.error = data.message || 'Cannot load Setting Die'
       return
@@ -170,7 +213,7 @@ function handleSettingDieSaved(message = 'Setting Die saved successfully.') {
 }
 
 function openBulkDelete() {
-  if (!canManageProduction.value) return
+  if (!canDeleteProduction.value) return
   bulkDeleteState.isOpen = true
   bulkDeleteState.adminPassword = ''
   bulkDeleteState.error = ''
@@ -182,7 +225,7 @@ function closeBulkDelete() {
 }
 
 async function submitBulkDelete() {
-  if (bulkDeleteState.isSubmitting || !canManageProduction.value) return
+  if (bulkDeleteState.isSubmitting || !canDeleteProduction.value) return
   bulkDeleteState.error = ''
   bulkDeleteState.isSubmitting = true
 
@@ -228,7 +271,7 @@ function formatDate(dateString) {
       </div>
       <div class="flex flex-wrap gap-3">
         <button
-          v-if="canManageProduction"
+          v-if="canDeleteProduction"
           type="button"
           :disabled="!hasSelectedJobs"
           class="grid h-11 w-11 place-items-center rounded-2xl border border-red-100 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -240,7 +283,7 @@ function formatDate(dateString) {
             <path d="M5 7h14M10 11v6M14 11v6M8 7l1-3h6l1 3M7 7l1 13h8l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
-        <button v-if="canManageProduction" type="button" class="grid h-11 w-11 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700" title="เพิ่ม Production" aria-label="เพิ่ม Production" @click="showCreateModal = true">
+        <button v-if="canCreateProduction" type="button" class="grid h-11 w-11 place-items-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700" title="เพิ่ม Production" aria-label="เพิ่ม Production" @click="showCreateModal = true">
           <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
           </svg>
@@ -289,8 +332,10 @@ function formatDate(dateString) {
       v-else
       :jobs="jobs"
       :selected-ids="selectedIds"
-      :can-manage-production="canManageProduction"
+      :can-delete-production="canDeleteProduction"
+      :can-accept-production="canAcceptProduction"
       :can-manage-setting-die="canManageSettingDie"
+      :highlighted-id="highlightedJobId"
       @toggle-select="toggleSelect"
       @view="openDetail"
       @accept="acceptJob"
@@ -303,7 +348,9 @@ function formatDate(dateString) {
       v-if="settingModalState.isOpen && settingModalState.job && !settingModalState.isLoading && !settingModalState.error"
       :job="settingModalState.job"
       :setting="settingModalState.setting"
+      :process-die-no="settingModalState.processDieNo"
       :can-send-to-qc="canSendSettingDieToQC"
+      :user-role="role"
       @close="closeSettingDie"
       @saved="handleSettingDieSaved"
     />
@@ -374,7 +421,6 @@ function formatDate(dateString) {
             <p v-if="!detailState.setting" class="mt-2 text-sm text-slate-500">No setting die data yet.</p>
             <dl v-else class="mt-3 grid gap-3 text-sm md:grid-cols-2">
               <div><dt class="text-slate-500">Lot No.</dt><dd class="font-medium">{{ detailState.setting.lot_no || '-' }}</dd></div>
-              <div><dt class="text-slate-500">Plan No.</dt><dd class="font-medium">{{ detailState.setting.plan_no || '-' }}</dd></div>
               <div><dt class="text-slate-500">Process Die</dt><dd class="font-medium">{{ detailState.setting.process_die || '-' }}</dd></div>
               <div><dt class="text-slate-500">Technician</dt><dd class="font-medium">{{ detailState.setting.technician || '-' }}</dd></div>
             </dl>

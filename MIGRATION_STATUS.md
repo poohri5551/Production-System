@@ -18,6 +18,7 @@
 - Home Dashboard Phase 1-5: Flow/schema review, read-only dashboard API, Vue Home Dashboard, polish, smoke checks, and documentation.
 - Admin safety hardening: Last Admin delete/demote protection, session-backed password checks, and server-only emergency Admin bootstrap script.
 - Users Management password reset: Admin-only password reset endpoint and Vue modal; password hashes are never returned to the frontend.
+- Workflow Lot No. migration: Production Plan business identifier is now canonical `lot_no` end-to-end; internal `plan_id`, `production_plans`, and Production Plan entity names remain unchanged.
 
 ## Active Modules In Vue
 
@@ -57,6 +58,9 @@
 - No Phase 8 schema changes were made.
 - `db_config` remains unchanged.
 - Existing soft-delete behavior is preserved for production/QC/start/finish records.
+- Migration `005_replace_plan_no_with_canonical_lot_no.sql` consolidates the former business identifier into one `VARCHAR(100)` `lot_no` column across Production Plan, Setting Die, QC, Production Start, Production Finish, and notifications.
+- Migration 005 aborts before consolidation when a non-empty legacy Setting Die/QC/Start/Finish Lot value conflicts with the former canonical value.
+- The canonical root `inventory_db.sql` already contains migration 005 schema; fresh imports do not rerun migration 005.
 - Users delete behavior remains the existing backend behavior, including the main `admin` guard.
 - User management now also blocks deleting or demoting the last Admin account.
 - Admin users can reset user passwords without changing user id, username, role, or created_at.

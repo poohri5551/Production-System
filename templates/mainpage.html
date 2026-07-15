@@ -677,7 +677,6 @@
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Plan No.</th>
                         <th>Lot No.</th>
                         <th>Part No.</th>
                         <th>Die No.</th>
@@ -711,7 +710,6 @@
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Plan No.</th>
                         <th>Lot No.</th>
                         <th>Part No.</th>
                         <th>Actual Q'ty</th>
@@ -804,11 +802,10 @@
                 <input type="hidden" id="set-plan-id" name="plan_id">
                 <div class="form-row">
                     <div class="form-group"><label>Part No.</label><input type="text" id="set-part-no" name="set-part-no" readonly></div>
-                    <div class="form-group"><label>Lot No.</label><input type="text" name="set-lot-no" required></div>
+                    <div class="form-group"><label>Lot No.</label><input type="text" name="set-lot-no" required readonly></div>
                 </div>
                 <div class="form-row">
                     <div class="form-group"><label>Die No.</label><input type="text" id="set-die-no" name="set-die-no" readonly></div>
-                    <div class="form-group"><label>Plan No.</label><input type="text" name="set-plan-no" required></div>
                 </div>
                 <div class="form-group"><label>Process Die</label><input type="text" name="set-process-die" required></div>
                 <div class="form-row">
@@ -851,11 +848,10 @@
             <form id="qcForm">
                 <input type="hidden" id="qc-id" name="qc-id">
                 <div class="form-row">
-                    <div class="form-group"><label>Lot No.</label><input type="text" name="qc-lot-no" required></div>
                     <div class="form-group">
-                        <label>Plan No.</label>
-                        <select id="qc-plan-no" name="qc-plan-no" onchange="handleQCPlanChange()" required>
-                            <option value="">-- เลือก Plan No. --</option>
+                        <label>Lot No.</label>
+                        <select id="qc-lot-no" name="qc-lot-no" onchange="handleQCPlanChange()" required>
+                            <option value="">-- เลือก Lot No. --</option>
                         </select>
                     </div>
                 </div>
@@ -889,13 +885,12 @@
             <form id="productionStartForm">
                 <input type="hidden" id="start-id" name="start-id">
                 <div class="form-group">
-                    <label>Plan No.</label>
-                    <select id="start-plan-no" name="start-plan-no" onchange="handleProductionStartPlanChange()" required>
-                        <option value="">-- เลือก Plan No. --</option>
+                    <label>Lot No.</label>
+                    <select id="start-lot-no" name="start-lot-no" onchange="handleProductionStartPlanChange()" required>
+                        <option value="">-- เลือก Lot No. --</option>
                     </select>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Lot No.</label><input type="text" id="start-lot-no" name="start-lot-no" readonly></div>
                     <div class="form-group"><label>Part No.</label><input type="text" id="start-part-no" name="start-part-no" readonly></div>
                 </div>
                 <div class="form-row">
@@ -922,13 +917,12 @@
             <h2><i class="fas fa-clipboard-check" style="color: #3b82f6;"></i> Production Finish</h2>
             <form id="productionFinishForm">
                 <div class="form-group">
-                    <label>Plan No.</label>
-                    <select id="finish-plan-no" name="finish-plan-no" onchange="handleProductionFinishPlanChange()" required>
-                        <option value="">-- เลือก Plan No. --</option>
+                    <label>Lot No.</label>
+                    <select id="finish-lot-no" name="finish-lot-no" onchange="handleProductionFinishPlanChange()" required>
+                        <option value="">-- เลือก Lot No. --</option>
                     </select>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Lot No.</label><input type="text" id="finish-lot-no" name="finish-lot-no" readonly required></div>
                     <div class="form-group"><label>Actual Q'ty</label><input type="number" id="finish-actual-qty" name="finish-actual-qty" min="0" oninput="validateProductionFinishForm()" required></div>
                 </div>
                 <div class="form-group"><label>Note</label><textarea id="finish-note" name="finish-note" rows="3"></textarea></div>
@@ -1018,7 +1012,6 @@
                 <div class="detail-section-title"><i class="fas fa-cogs" style="color: #0ea5e9;"></i> ข้อมูล Setting Die</div>
                 <div class="detail-grid">
                     <div class="detail-item"><span class="detail-label">Lot No.</span><span class="detail-value" id="vs-lot">-</span></div>
-                    <div class="detail-item"><span class="detail-label">Plan No.</span><span class="detail-value" id="vs-plan">-</span></div>
                     <div class="detail-item"><span class="detail-label">Process Die</span><span class="detail-value" id="vs-process">-</span></div>
                     <div class="detail-item"><span class="detail-label">Material</span><span class="detail-value" id="vs-mat">-</span></div>
                     <div class="detail-item"><span class="detail-label">DH</span><span class="detail-value" id="vs-dh">-</span></div>
@@ -1046,7 +1039,6 @@
             <h2><i class="fas fa-microscope" style="color: #3b82f6;"></i> รายละเอียดการตรวจสอบ QC</h2>
             <div class="detail-grid">
                 <div class="detail-item"><span class="detail-label">Lot No.</span><span class="detail-value" id="vq-lot">-</span></div>
-                <div class="detail-item"><span class="detail-label">Plan No.</span><span class="detail-value" id="vq-plan">-</span></div>
                 <div class="detail-item"><span class="detail-label">Part No.</span><span class="detail-value" id="vq-part">-</span></div>
                 <div class="detail-item"><span class="detail-label">ผลการตรวจสอบ (%)</span><span class="detail-value" id="vq-percent">-</span></div>
                 <div class="detail-item"><span class="detail-label">เวลาเริ่มตรวจ</span><span class="detail-value" id="vq-start">-</span></div>
@@ -1296,31 +1288,30 @@
             deleteRecord(`/api/users/${userId}/delete`, loadUsers, `user "${username || '-'}"`);
         }
 
-        function loadQCPlanOptions(selectedPlanNo = '') {
+        function loadQCPlanOptions(selectedLotNo = '') {
             return fetch('/api/qc/plans')
             .then(res => res.json())
             .then(data => {
                 qcPlanOptions = data;
-                const select = document.getElementById('qc-plan-no');
-                select.innerHTML = '<option value="">-- เลือก Plan No. --</option>';
+                const select = document.getElementById('qc-lot-no');
+                select.innerHTML = '<option value="">-- เลือก Lot No. --</option>';
                 data.forEach(plan => {
                     const option = document.createElement('option');
-                    option.value = plan.plan_no;
-                    option.textContent = plan.plan_no;
+                    option.value = plan.lot_no;
+                    option.textContent = plan.lot_no;
                     select.appendChild(option);
                 });
-                if (selectedPlanNo && !data.some(plan => plan.plan_no === selectedPlanNo)) {
+                if (selectedLotNo && !data.some(plan => plan.lot_no === selectedLotNo)) {
                     const option = document.createElement('option');
-                    option.value = selectedPlanNo;
-                    option.textContent = selectedPlanNo;
+                    option.value = selectedLotNo;
+                    option.textContent = selectedLotNo;
                     select.appendChild(option);
                 }
-                select.value = selectedPlanNo;
+                select.value = selectedLotNo;
             });
         }
 
         function applyQCPlan(plan) {
-            document.querySelector('input[name="qc-lot-no"]').value = plan.lot_no || '';
             document.querySelector('input[name="qc-part-no"]').value = plan.part_no || '';
         }
 
@@ -1331,28 +1322,28 @@
         }
 
         function handleQCPlanChange() {
-            const planNo = document.getElementById('qc-plan-no').value;
-            if (!planNo) {
+            const lotNo = document.getElementById('qc-lot-no').value;
+            if (!lotNo) {
                 applyQCPlan({});
                 return;
             }
 
-            const cachedPlan = qcPlanOptions.find(plan => plan.plan_no === planNo);
+            const cachedPlan = qcPlanOptions.find(plan => plan.lot_no === lotNo);
             if (cachedPlan) {
                 if (!cachedPlan.lot_no || !cachedPlan.part_no) {
-                    closeQCAsInvalid('ข้อมูล Plan No. นี้ไม่ครบ ไม่สามารถบันทึก QC ได้');
+                    closeQCAsInvalid('ข้อมูล Lot No. นี้ไม่ครบ ไม่สามารถบันทึก QC ได้');
                     return;
                 }
                 applyQCPlan(cachedPlan);
                 return;
             }
 
-            fetch(`/api/qc/plan?plan_no=${encodeURIComponent(planNo)}`)
+            fetch(`/api/qc/plan?lot_no=${encodeURIComponent(lotNo)}`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     if (!data.plan.lot_no || !data.plan.part_no) {
-                        closeQCAsInvalid('ข้อมูล Plan No. นี้ไม่ครบ ไม่สามารถบันทึก QC ได้');
+                        closeQCAsInvalid('ข้อมูล Lot No. นี้ไม่ครบ ไม่สามารถบันทึก QC ได้');
                         return;
                     }
                     applyQCPlan(data.plan);
@@ -1440,7 +1431,6 @@
             }
             
             const formData = new FormData();
-            formData.append('plan_no', document.getElementById('vq-plan').innerText.trim());
             formData.append('lot_no', document.getElementById('vq-lot').innerText.trim());
             formData.append('part_no', document.getElementById('vq-part').innerText.trim());
 
@@ -1600,8 +1590,8 @@
                 deleteUrl: '/api/qc/bulk_delete',
                 reload: loadQC,
                 renderItem: item => `
-                    <strong>Plan ${item.plan_no || '-'}</strong>
-                    <div class="bulk-delete-meta">Lot ${item.lot_no || '-'} | Part ${item.part_no || '-'} | ผลลัพธ์ ${item.percent_result || '-'}% | Status ${item.status || '-'}</div>
+                    <strong>Lot No. ${item.lot_no || '-'}</strong>
+                    <div class="bulk-delete-meta">Part ${item.part_no || '-'} | ผลลัพธ์ ${item.percent_result || '-'}% | Status ${item.status || '-'}</div>
                 `
             },
             productionStart: {
@@ -1610,8 +1600,8 @@
                 deleteUrl: '/api/production_start/bulk_delete',
                 reload: loadProductionStarts,
                 renderItem: item => `
-                    <strong>Plan ${item.plan_no || '-'}</strong>
-                    <div class="bulk-delete-meta">Lot ${item.lot_no || '-'} | Part ${item.part_no || '-'} | Die ${item.die_no || '-'} | Q'ty ${item.qty || '-'}</div>
+                    <strong>Lot No. ${item.lot_no || '-'}</strong>
+                    <div class="bulk-delete-meta">Part ${item.part_no || '-'} | Die ${item.die_no || '-'} | Q'ty ${item.qty || '-'}</div>
                     <div class="bulk-delete-meta">เวลาเริ่มการผลิต: ${formatDateTimeToDMY(item.time_start)}</div>
                 `
             },
@@ -1621,14 +1611,14 @@
                 deleteUrl: '/api/production_finish/bulk_delete',
                 reload: loadProductionFinishes,
                 renderItem: item => `
-                    <strong>Plan ${item.plan_no || '-'}</strong>
-                    <div class="bulk-delete-meta">Lot ${item.lot_no || '-'} | Actual Q'ty ${item.actual_qty || '-'} | Finish ${formatDateTimeToDMY(item.time_finish)}</div>
+                    <strong>Lot No. ${item.lot_no || '-'}</strong>
+                    <div class="bulk-delete-meta">Actual Q'ty ${item.actual_qty || '-'} | Finish ${formatDateTimeToDMY(item.time_finish)}</div>
                 `
             }
         };
 
         function validateProductionStartForm() {
-            const requiredIds = ['start-plan-no', 'start-lot-no', 'start-part-no', 'start-die-no', 'start-qty', 'start-time-start'];
+            const requiredIds = ['start-lot-no', 'start-part-no', 'start-die-no', 'start-qty', 'start-time-start'];
             const isComplete = requiredIds.every(id => {
                 const el = document.getElementById(id);
                 return el && String(el.value || '').trim() !== '';
@@ -1646,31 +1636,31 @@
             validateProductionStartForm();
         }
 
-        function loadProductionStartPlans(selectedPlanNo = '') {
+        function loadProductionStartPlans(selectedLotNo = '') {
             return fetch('/api/production_start/plans')
             .then(res => res.json())
             .then(data => {
                 productionStartPlans = data;
-                const select = document.getElementById('start-plan-no');
-                if (data.length === 0 && !selectedPlanNo) {
-                    select.innerHTML = '<option value="">-- No available Plan No. --</option>';
+                const select = document.getElementById('start-lot-no');
+                if (data.length === 0 && !selectedLotNo) {
+                    select.innerHTML = '<option value="">-- No available Lot No. --</option>';
                     validateProductionStartForm();
                     return;
                 }
-                select.innerHTML = '<option value="">-- เลือก Plan No. --</option>';
+                select.innerHTML = '<option value="">-- เลือก Lot No. --</option>';
                 data.forEach(plan => {
                     const option = document.createElement('option');
-                    option.value = plan.plan_no;
-                    option.textContent = plan.plan_no;
+                    option.value = plan.lot_no;
+                    option.textContent = plan.lot_no;
                     select.appendChild(option);
                 });
-                if (selectedPlanNo && !data.some(plan => plan.plan_no === selectedPlanNo)) {
+                if (selectedLotNo && !data.some(plan => plan.lot_no === selectedLotNo)) {
                     const option = document.createElement('option');
-                    option.value = selectedPlanNo;
-                    option.textContent = selectedPlanNo;
+                    option.value = selectedLotNo;
+                    option.textContent = selectedLotNo;
                     select.appendChild(option);
                 }
-                select.value = selectedPlanNo;
+                select.value = selectedLotNo;
             });
         }
 
@@ -1689,29 +1679,29 @@
         }
 
         function handleProductionStartPlanChange() {
-            const planNo = document.getElementById('start-plan-no').value;
-            if (!planNo) {
+            const lotNo = document.getElementById('start-lot-no').value;
+            if (!lotNo) {
                 applyProductionStartPlan({});
                 return;
             }
 
-            const cachedPlan = productionStartPlans.find(plan => plan.plan_no === planNo);
+            const cachedPlan = productionStartPlans.find(plan => plan.lot_no === lotNo);
             if (cachedPlan) {
                 if (!cachedPlan.lot_no || !cachedPlan.part_no || !cachedPlan.die_no || !cachedPlan.qty) {
-                    closeProductionStartAsInvalid('ข้อมูล Plan No. นี้ไม่ครบ ไม่สามารถบันทึก Production Start ได้');
+                    closeProductionStartAsInvalid('ข้อมูล Lot No. นี้ไม่ครบ ไม่สามารถบันทึก Production Start ได้');
                     return;
                 }
                 applyProductionStartPlan(cachedPlan);
                 return;
             }
 
-            fetch(`/api/production_start/plan?plan_no=${encodeURIComponent(planNo)}`)
+            fetch(`/api/production_start/plan?lot_no=${encodeURIComponent(lotNo)}`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     const plan = data.plan;
                     if (!plan.lot_no || !plan.part_no || !plan.die_no || !plan.qty) {
-                        closeProductionStartAsInvalid('ข้อมูล Plan No. นี้ไม่ครบ ไม่สามารถบันทึก Production Start ได้');
+                        closeProductionStartAsInvalid('ข้อมูล Lot No. นี้ไม่ครบ ไม่สามารถบันทึก Production Start ได้');
                         return;
                     }
                     applyProductionStartPlan(plan);
@@ -1737,10 +1727,9 @@
                 }
 
                 const item = data.production_start;
-                loadProductionStartPlans(item.plan_no).then(() => {
+                loadProductionStartPlans(item.lot_no).then(() => {
                     document.querySelector('#productionStartModal h2').innerHTML = '<i class="fas fa-pen" style="color: #10b981;"></i> แก้ไข Production Start';
                     document.getElementById('start-id').value = item.id;
-                    document.getElementById('start-plan-no').value = item.plan_no || '';
                     document.getElementById('start-lot-no').value = item.lot_no || '';
                     document.getElementById('start-part-no').value = item.part_no || '';
                     document.getElementById('start-die-no').value = item.die_no || '';
@@ -1838,7 +1827,7 @@
         }
 
         function validateProductionFinishForm() {
-            const requiredIds = ['finish-plan-no', 'finish-lot-no', 'finish-actual-qty', 'finish-time-finish'];
+            const requiredIds = ['finish-lot-no', 'finish-actual-qty', 'finish-time-finish'];
             const isComplete = requiredIds.every(id => {
                 const el = document.getElementById(id);
                 return el && String(el.value || '').trim() !== '';
@@ -1854,20 +1843,20 @@
             validateProductionFinishForm();
         }
 
-        function loadProductionFinishPlans(selectedPlanNo = '') {
+        function loadProductionFinishPlans(selectedLotNo = '') {
             return fetch('/api/production_finish/plans')
             .then(res => res.json())
             .then(data => {
                 productionFinishPlans = data;
-                const select = document.getElementById('finish-plan-no');
-                select.innerHTML = '<option value="">-- เลือก Plan No. --</option>';
+                const select = document.getElementById('finish-lot-no');
+                select.innerHTML = '<option value="">-- เลือก Lot No. --</option>';
                 data.forEach(plan => {
                     const option = document.createElement('option');
-                    option.value = plan.plan_no;
-                    option.textContent = plan.plan_no;
+                    option.value = plan.lot_no;
+                    option.textContent = plan.lot_no;
                     select.appendChild(option);
                 });
-                select.value = selectedPlanNo;
+                select.value = selectedLotNo;
             });
         }
 
@@ -1883,28 +1872,28 @@
         }
 
         function handleProductionFinishPlanChange() {
-            const planNo = document.getElementById('finish-plan-no').value;
-            if (!planNo) {
+            const lotNo = document.getElementById('finish-lot-no').value;
+            if (!lotNo) {
                 applyProductionFinishPlan({});
                 return;
             }
 
-            const cachedPlan = productionFinishPlans.find(plan => plan.plan_no === planNo);
+            const cachedPlan = productionFinishPlans.find(plan => plan.lot_no === lotNo);
             if (cachedPlan) {
                 if (!cachedPlan.lot_no) {
-                    closeProductionFinishAsInvalid('ข้อมูล Plan No. นี้ไม่ครบ ไม่สามารถบันทึก Production Finish ได้');
+                    closeProductionFinishAsInvalid('ข้อมูล Lot No. นี้ไม่ครบ ไม่สามารถบันทึก Production Finish ได้');
                     return;
                 }
                 applyProductionFinishPlan(cachedPlan);
                 return;
             }
 
-            fetch(`/api/production_finish/plan?plan_no=${encodeURIComponent(planNo)}`)
+            fetch(`/api/production_finish/plan?lot_no=${encodeURIComponent(lotNo)}`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
                     if (!data.plan.lot_no) {
-                        closeProductionFinishAsInvalid('ข้อมูล Plan No. นี้ไม่ครบ ไม่สามารถบันทึก Production Finish ได้');
+                        closeProductionFinishAsInvalid('ข้อมูล Lot No. นี้ไม่ครบ ไม่สามารถบันทึก Production Finish ได้');
                         return;
                     }
                     applyProductionFinishPlan(data.plan);
@@ -1942,7 +1931,6 @@
                         : `<button class="btn-waiting" type="button" onclick="confirmProductionFinish(${item.id})" title="กดยืนยัน Finish"><i class="fas fa-flag-checkered"></i> ยืนยัน Finish</button>`;
                     tbody.innerHTML += `
                         <tr>
-                            <td>${item.plan_no || '-'}</td>
                             <td>${item.lot_no || '-'}</td>
                             <td>${item.part_no || '-'}</td>
                             <td><strong>${item.actual_qty || '-'}</strong></td>
@@ -1957,7 +1945,7 @@
         }
 
         function confirmProductionFinish(finishId) {
-            if (!confirm('ยืนยัน Finish งานนี้ใช่หรือไม่? งานค้างในหน้าอื่นของ Plan No. นี้จะถูกลบออก')) return;
+            if (!confirm('ยืนยัน Finish งานนี้ใช่หรือไม่? งานค้างในหน้าอื่นของ Lot No. นี้จะถูกลบออก')) return;
             fetch(`/api/production_finish/${finishId}/confirm`, { method: 'POST' })
             .then(res => res.json())
             .then(data => {
@@ -1996,7 +1984,6 @@
                         : `<button class="btn-waiting" type="button" onclick="confirmProductionStart(${item.id})" title="กดยืนยันการผลิต"><i class="fas fa-hourglass-half"></i> รอการยืนยัน</button>`;
                     tbody.innerHTML += `
                         <tr>
-                            <td>${item.plan_no || '-'}</td>
                             <td>${item.lot_no || '-'}</td>
                             <td>${item.part_no || '-'}</td>
                             <td>${item.die_no || '-'}</td>
@@ -2030,7 +2017,6 @@
                     if (setting) {
                         settingDiv.style.display = 'block';
                         document.getElementById('vs-lot').innerText = setting.lot_no || '-';
-                        document.getElementById('vs-plan').innerText = setting.plan_no || '-';
                         document.getElementById('vs-process').innerText = setting.process_die || '-';
                         document.getElementById('vs-mat').innerText = setting.material || '-';
                         document.getElementById('vs-dh').innerText = setting.dh || '-';
@@ -2056,7 +2042,6 @@
                     const form = document.getElementById('qcForm');
                     form.reset();
                     document.getElementById('qc-id').value = qc.id;
-                    document.querySelector('input[name="qc-lot-no"]').value = qc.lot_no || '';
                     document.querySelector('input[name="qc-part-no"]').value = qc.part_no || '';
                     document.getElementById('qc-time-start').value = formatForDatetimeInput(qc.time_start);
                     document.getElementById('qc-time-end').value = formatForDatetimeInput(qc.time_end);
@@ -2072,9 +2057,9 @@
                     if (title) title.innerHTML = '<i class="fas fa-pen" style="color: #ec4899;"></i> แก้ไขข้อมูล QC Inspection';
                     if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-save"></i> บันทึกการแก้ไข';
 
-                    loadQCPlanOptions(qc.plan_no || '').then(() => {
-                        if (qc.plan_no && !qcPlanOptions.some(plan => plan.plan_no === qc.plan_no)) {
-                            closeQCAsInvalid('ไม่พบข้อมูล Plan No. นี้');
+                    loadQCPlanOptions(qc.lot_no || '').then(() => {
+                        if (qc.lot_no && !qcPlanOptions.some(plan => plan.lot_no === qc.lot_no)) {
+                            closeQCAsInvalid('ไม่พบข้อมูล Lot No. นี้');
                             return;
                         }
                         isOpeningQCEdit = true;
@@ -2089,7 +2074,6 @@
                 if(data.success) {
                     const qc = data.qc;
                     document.getElementById('vq-lot').innerText = qc.lot_no || '-';
-                    document.getElementById('vq-plan').innerText = qc.plan_no || '-';
                     document.getElementById('vq-part').innerText = qc.part_no || '-';
                     document.getElementById('vq-percent').innerText = qc.percent_result ? qc.percent_result + '%' : '-';
                     document.getElementById('vq-start').innerText = formatDateTimeToDMY(qc.time_start);
@@ -2144,7 +2128,6 @@
                 if (data.success && data.setting) {
                     const s = data.setting;
                     document.querySelector('input[name="set-lot-no"]').value = s.lot_no || '';
-                    document.querySelector('input[name="set-plan-no"]').value = s.plan_no || '';
                     document.querySelector('input[name="set-process-die"]').value = s.process_die || '';
                     document.querySelector('input[name="set-dh"]').value = s.dh || '';
                     document.querySelector('input[name="set-spm"]').value = s.spm || '';

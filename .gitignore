@@ -11,6 +11,13 @@ node_modules/
 frontend/node_modules/
 npm-debug.log*
 inventory_db.sql
+/reset_keep_admin.sql
+/scripts/workflow_handoff_rehearsal.py
 backups/*
 !backups/.gitkeep
 export_excel/
+/1.FORCASE CENTOR.xlsx
+/forcase/*.xlsx
+forecast_source/*
+!forecast_source/.gitkeep
+!forecast_source/README.md

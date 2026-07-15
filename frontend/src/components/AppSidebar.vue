@@ -16,6 +16,10 @@ defineProps({
     type: String,
     default: '',
   },
+  menuBadges: {
+    type: Object,
+    default: () => ({}),
+  },
 })
 
 const emit = defineEmits(['select', 'logout'])
@@ -70,8 +74,19 @@ const emit = defineEmits(['select', 'logout'])
             <path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM4 19a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
             <path d="M16 11.5a2.5 2.5 0 1 0 0-5M15.5 15c2.5.3 4.5 1.8 4.5 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
           </svg>
+          <svg v-else-if="menu.icon === 'forecast'" class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 4h14v16H5V4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+            <path d="M8 8h8M8 12h3M8 16h3M15 12v4M13 14h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
         </span>
-        <span>{{ menu.label }}</span>
+        <span class="min-w-0 flex-1 text-left">{{ menu.label }}</span>
+        <span
+          v-if="menuBadges[menu.key] > 0"
+          class="ml-auto min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none"
+          :class="activeKey === menu.key ? 'bg-white text-blue-700' : 'bg-blue-600 text-white'"
+        >
+          {{ menuBadges[menu.key] > 99 ? '99+' : menuBadges[menu.key] }}
+        </span>
       </button>
     </nav>
 

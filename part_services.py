@@ -159,9 +159,9 @@ def ensure_parts_schema(cursor):
     _ensure_index(cursor, "qc_inspections", "idx_qc_inspections_plan_id", "plan_id")
     _ensure_index(cursor, "production_starts", "idx_production_starts_plan_id", "plan_id")
     _ensure_index(cursor, "production_finishes", "idx_production_finishes_plan_id", "plan_id")
-    _ensure_index(cursor, "qc_inspections", "idx_qc_inspections_plan_no", "plan_no")
-    _ensure_index(cursor, "production_starts", "idx_production_starts_plan_no", "plan_no")
-    _ensure_index(cursor, "production_finishes", "idx_production_finishes_plan_no", "plan_no")
+    _ensure_index(cursor, "qc_inspections", "idx_qc_inspections_lot_no", "lot_no")
+    _ensure_index(cursor, "production_starts", "idx_production_starts_lot_no", "lot_no")
+    _ensure_index(cursor, "production_finishes", "idx_production_finishes_lot_no", "lot_no")
     _ensure_index(cursor, "production_plans", "idx_production_plans_deleted_at", "deleted_at")
     _ensure_index(cursor, "setting_dies", "idx_setting_dies_deleted_at", "deleted_at")
     _ensure_index(cursor, "qc_inspections", "idx_qc_inspections_deleted_at", "deleted_at")
@@ -269,11 +269,11 @@ def _backfill_plan_ids(cursor):
             """
             UPDATE qc_inspections q
             JOIN (
-                SELECT plan_no, MAX(plan_id) AS plan_id
+                SELECT lot_no, MAX(plan_id) AS plan_id
                 FROM setting_dies
-                WHERE plan_no IS NOT NULL AND TRIM(plan_no) <> ''
-                GROUP BY plan_no
-            ) s ON s.plan_no = q.plan_no
+                WHERE lot_no IS NOT NULL AND TRIM(lot_no) <> ''
+                GROUP BY lot_no
+            ) s ON s.lot_no = q.lot_no
             SET q.plan_id = s.plan_id
             WHERE q.plan_id IS NULL
             """
@@ -284,11 +284,11 @@ def _backfill_plan_ids(cursor):
             """
             UPDATE production_starts ps
             JOIN (
-                SELECT plan_no, MAX(plan_id) AS plan_id
+                SELECT lot_no, MAX(plan_id) AS plan_id
                 FROM setting_dies
-                WHERE plan_no IS NOT NULL AND TRIM(plan_no) <> ''
-                GROUP BY plan_no
-            ) s ON s.plan_no = ps.plan_no
+                WHERE lot_no IS NOT NULL AND TRIM(lot_no) <> ''
+                GROUP BY lot_no
+            ) s ON s.lot_no = ps.lot_no
             SET ps.plan_id = s.plan_id
             WHERE ps.plan_id IS NULL
             """
@@ -299,11 +299,11 @@ def _backfill_plan_ids(cursor):
             """
             UPDATE production_finishes pf
             JOIN (
-                SELECT plan_no, MAX(plan_id) AS plan_id
+                SELECT lot_no, MAX(plan_id) AS plan_id
                 FROM setting_dies
-                WHERE plan_no IS NOT NULL AND TRIM(plan_no) <> ''
-                GROUP BY plan_no
-            ) s ON s.plan_no = pf.plan_no
+                WHERE lot_no IS NOT NULL AND TRIM(lot_no) <> ''
+                GROUP BY lot_no
+            ) s ON s.lot_no = pf.lot_no
             SET pf.plan_id = s.plan_id
             WHERE pf.plan_id IS NULL
             """

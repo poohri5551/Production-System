@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   bulkDeleteQCInspections,
   getQCInspectionDetail,
@@ -9,13 +9,17 @@ import QCDetailModal from '../components/QCDetailModal.vue'
 import QCFormModal from '../components/QCFormModal.vue'
 import QCTable from '../components/QCTable.vue'
 import { can } from '../permissions'
+import { findWorkflowTarget } from '../constants/workflowStatus'
 
 const props = defineProps({
   permissions: {
     type: Array,
     default: () => [],
   },
+  focusTarget: { type: Object, default: null },
 })
+
+const emit = defineEmits(['focus-result'])
 
 const filters = reactive({
   partNo: '',
@@ -27,6 +31,7 @@ const selectedIds = ref([])
 const isLoading = ref(false)
 const errorMessage = ref('')
 const noticeMessage = ref('')
+const highlightedQcId = ref(null)
 const showFormModal = ref(false)
 const editInspection = ref(null)
 const detailState = reactive({ isOpen: false, isLoading: false, error: '', inspection: null })
@@ -39,6 +44,7 @@ const bulkDeleteState = reactive({
 
 const canManageQC = computed(() => can(props.permissions, 'qc.manage'))
 const hasSelectedInspections = computed(() => canManageQC.value && selectedIds.value.length > 0)
+let highlightTimer = null
 
 onMounted(() => {
   loadQC()
@@ -53,6 +59,8 @@ async function loadQC() {
     if (Array.isArray(data)) {
       inspections.value = data
       selectedIds.value = selectedIds.value.filter((id) => data.some((qc) => qc.id === id))
+      isLoading.value = false
+      await applyFocusTarget()
       return
     }
     errorMessage.value = data.message || 'Cannot load QC inspections'
@@ -62,6 +70,29 @@ async function loadQC() {
     isLoading.value = false
   }
 }
+
+async function applyFocusTarget() {
+  if (!props.focusTarget) return
+  const record = findWorkflowTarget(inspections.value, props.focusTarget)
+  if (!record) {
+    emit('focus-result', { found: false, lotNo: props.focusTarget.lotNo })
+    return
+  }
+  highlightedQcId.value = record.id
+  await nextTick()
+  document.getElementById(`qc-row-${record.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  emit('focus-result', { found: true, lotNo: record.lot_no })
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+  highlightTimer = window.setTimeout(() => { highlightedQcId.value = null }, 5000)
+}
+
+watch(() => props.focusTarget?.token, () => {
+  if (!isLoading.value && props.focusTarget) applyFocusTarget()
+})
+
+onUnmounted(() => {
+  if (highlightTimer) window.clearTimeout(highlightTimer)
+})
 
 function clearFilters() {
   filters.partNo = ''
@@ -237,6 +268,7 @@ async function submitBulkDelete() {
       :inspections="inspections"
       :selected-ids="selectedIds"
       :can-manage-qc="canManageQC"
+      :highlighted-id="highlightedQcId"
       @toggle-select="toggleSelect"
       @view="openDetail"
       @edit="openEditModal"

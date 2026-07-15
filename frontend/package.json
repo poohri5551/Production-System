@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:forecast": "node --test tests/forecast.test.mjs",
+    "test:workflow": "node --test tests/lot-no.test.mjs",
+    "test:dashboard": "node --test tests/dashboard-status.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
